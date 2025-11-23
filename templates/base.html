@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Factory Work Management</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="topbar">
+    <div class="topbar-left">
+        <div class="brand-mark">F</div>
+        <div class="brand-text">
+            <h1>Factory Work Management</h1>
+            <p class="brand-subtitle">End-to-end visibility across procurement, production and QA</p>
+        </div>
+    </div>
+    <nav class="topbar-nav">
+        <a href="/" class="nav-item">Dashboard</a>
+        <a href="/role/procurement" class="nav-item">Procurement</a>
+        <a href="/role/manufacturing" class="nav-item">Manufacturing</a>
+        <a href="/role/qa" class="nav-item">Quality</a>
+        <a href="/role/packaging" class="nav-item">Packaging</a>
+        <a href="/role/inventory" class="nav-item">Inventory</a>
+        <a href="/vendors" class="nav-item nav-item-cta">Manage Vendors</a>
+    </nav>
+</header>
+
+<main class="page">
+    {% block content %}{% endblock %}
+</main>
+
+<footer class="footer">
+    <span>Factory Work Management · Internal tool</span>
+</footer>
+</body>
+</html>
