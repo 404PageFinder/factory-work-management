@@ -730,8 +730,8 @@ def delete_recipe(recipe_id: int, db: Session = Depends(get_db)):
         db.delete(recipe)
         db.commit()
     return RedirectResponse(url="/recipes", status_code=303)
-# Add this route to your existing main.py file
-# Insert it after the recipe routes and before role pages
+    
+# -------- Help -------- #
 
 @app.get("/help/{page}", response_class=HTMLResponse)
 def help_page(page: str, request: Request):
