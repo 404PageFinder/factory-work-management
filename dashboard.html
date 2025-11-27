@@ -1,0 +1,379 @@
+{% extends "base.html" %}
+{% block content %}
+
+<section class="page-header">
+    <div>
+        <h2>🏭 Operations Overview</h2>
+        <p class="page-subtitle">
+            Real-time status of all work orders across departments
+        </p>
+    </div>
+</section>
+
+<section class="grid-main">
+    <!-- Metrics -->
+    <div class="panel">
+        <div class="panel-header">
+            <h3>📊 Work Order Metrics</h3>
+            <p class="panel-subtitle">Click on any metric to filter orders</p>
+        </div>
+
+        <div class="metrics-grid">
+            <a href="/" class="metric-card metric-neutral {% if not selected_status %}metric-active{% endif %}">
+                <span class="metric-label">🔢 All Orders</span>
+                <span class="metric-value">{{ stats.total }}</span>
+            </a>
+
+            <a href="/?status=new" class="metric-card metric-info {% if selected_status and selected_status.value == 'new' %}metric-active{% endif %}">
+                <span class="metric-label">✨ New</span>
+                <span class="metric-value">{{ stats.new }}</span>
+            </a>
+
+            <a href="/?status=in_progress" class="metric-card metric-warning {% if selected_status and selected_status.value == 'in_progress' %}metric-active{% endif %}">
+                <span class="metric-label">⚙️ In Progress</span>
+                <span class="metric-value">{{ stats.in_progress }}</span>
+            </a>
+
+            <a href="/?status=blocked" class="metric-card metric-danger {% if selected_status and selected_status.value == 'blocked' %}metric-active{% endif %}">
+                <span class="metric-label">⛔ Blocked</span>
+                <span class="metric-value">{{ stats.blocked }}</span>
+            </a>
+
+            <a href="/?status=completed" class="metric-card metric-success {% if selected_status and selected_status.value == 'completed' %}metric-active{% endif %}">
+                <span class="metric-label">✅ Completed</span>
+                <span class="metric-value">{{ stats.completed }}</span>
+            </a>
+
+            <a href="/?status=rejected" class="metric-card metric-danger-soft {% if selected_status and selected_status.value == 'rejected' %}metric-active{% endif %}">
+                <span class="metric-label">❌ Rejected</span>
+                <span class="metric-value">{{ stats.rejected }}</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- Create order -->
+    <div class="panel">
+        <div class="panel-header">
+            <h3>➕ Create Work Order</h3>
+            <p class="panel-subtitle">
+                Assign tasks to different departments
+            </p>
+        </div>
+        <form action="/create-order" method="post" class="form">
+            <!-- Order Category: New or Existing -->
+            <div class="form-field">
+                <label for="order_category">📂 Order Category</label>
+                <div class="radio-group">
+                    <div class="radio-option">
+                        <input type="radio" id="category_existing" name="order_category" value="existing" checked>
+                        <label for="category_existing">🔄 Existing</label>
+                    </div>
+                    <div class="radio-option">
+                        <input type="radio" id="category_new" name="order_category" value="new">
+                        <label for="category_new">✨ New</label>
+                    </div>
+                </div>
+                <p class="hint">Existing: Use recipe/standard order | New: Custom order with title</p>
+            </div>
+
+            <!-- Title (shown only for New) -->
+            <div class="form-field" id="title-field" style="display: none;">
+                <label for="title">📝 Title</label>
+                <input id="title" type="text" name="title"
+                       placeholder="e.g. Procure SS Sheets · 2mm · 500kg">
+            </div>
+
+            <!-- Description (shown only for New) -->
+            <div class="form-field" id="description-field" style="display: none;">
+                <label for="description">💬 Description</label>
+                <textarea id="description" name="description" rows="3"
+                          placeholder="Short description or special instructions"></textarea>
+            </div>
+
+            <div class="form-field">
+                <label for="assigned_role">👥 Assign To</label>
+                <select id="assigned_role" name="assigned_role">
+                    <option value="procurement">🛒 Procurement</option>
+                    <option value="manufacturing">⚙️ Manufacturing</option>
+                    <option value="qa">🔍 Quality</option>
+                    <option value="packaging">📦 Packaging</option>
+                    <option value="inventory">🏪 Inventory</option>
+                </select>
+            </div>
+
+            <div class="form-field">
+                <label for="order_type">📋 Order Type</label>
+                <div class="radio-group">
+                    <div class="radio-option">
+                        <input type="radio" id="type_instant" name="order_type" value="instant" checked>
+                        <label for="type_instant">⚡ Instant</label>
+                    </div>
+                    <div class="radio-option">
+                        <input type="radio" id="type_bulk" name="order_type" value="bulk">
+                        <label for="type_bulk">📦 Bulk</label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-field">
+                <label for="quantity">🔢 Quantity</label>
+                <input id="quantity" type="number" name="quantity" min="1" value="1">
+            </div>
+
+            <div class="form-field">
+                <label for="unit">📏 Unit</label>
+                <select id="unit" name="unit">
+                    <option value="Count">Count</option>
+                    <option value="KG">KG</option>
+                    <option value="Litres">Litres</option>
+                </select>
+            </div>
+
+            <div class="form-field" id="recipe-field" style="display: none;">
+                <label for="recipe_id">
+                    📖 Recipe <span class="hint">(for Manufacturing)</span>
+                </label>
+                <select id="recipe_id" name="recipe_id">
+                    <option value="0">— No recipe —</option>
+                    {% for r in recipes %}
+                    <option value="{{ r.id }}">{{ r.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-field" id="vendor-field" style="display: none;">
+                <label for="vendor_id">
+                    🏢 Vendor <span class="hint">(for Procurement)</span>
+                </label>
+                <select id="vendor_id" name="vendor_id">
+                    <option value="0">— No vendor —</option>
+                    {% for v in vendors %}
+                    <option value="{{ v.id }}">{{ v.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- Packaging Size -->
+            <div class="form-field">
+                <label for="packaging_size_gm">📦 Packaging Size (gm)</label>
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <input type="number" 
+                           id="packaging_size_gm" 
+                           name="packaging_size_gm" 
+                           min="10" 
+                           max="1000" 
+                           step="5" 
+                           value="50"
+                           style="width: 150px;">
+                    <span class="muted">gm (10-1000, steps of 5)</span>
+                </div>
+            </div>
+
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary">Create Order</button>
+            </div>
+        </form>
+    </div>
+</section>
+
+<section class="panel table-panel">
+    <div class="panel-header">
+        <h3>📋 Work Orders</h3>
+        <p class="panel-subtitle">
+            Latest 50 work orders across all departments
+        </p>
+    </div>
+    <div class="table-wrapper">
+        <table>
+            <thead>
+            <tr>
+                <th>ID</th>
+                <th>Title</th>
+                <th>Team</th>
+                <th>Status</th>
+                <th>Quantity</th>
+                <th>Order Type</th>
+                <th>Created At</th>
+            </tr>
+            </thead>
+            <tbody>
+            {% for o in orders %}
+            <tr>
+                <td><strong>{{ o.display_id or ('#' ~ o.id) }}</strong></td>
+                <td title="{{ o.title }}"><strong>{{ o.title }}</strong></td>
+                <td>
+                    <span class="pill pill-role-{{ o.assigned_role.value }}">
+                        {{ o.assigned_role|pretty }}
+                    </span>
+                </td>
+                <td>
+                    {% if o.status.value == 'blocked' %}
+                        <div class="blocked-indicator">
+                            <span class="pill pill-status-blocked">Blocked</span>
+                            {% if o.blocked_reason %}
+                            <span class="blocked-reason-tooltip" data-reason="{{ o.blocked_reason }}">
+                                ℹ️
+                            </span>
+                            {% endif %}
+                        </div>
+                    {% else %}
+                        <span class="pill pill-status-{{ o.status.value }}">
+                            {{ o.status|pretty }}
+                        </span>
+                    {% endif %}
+                </td>
+                <td>
+                    <strong>{{ o.quantity }}</strong>
+                    <span class="muted">{{ o.unit }}</span>
+                </td>
+                <td>
+                    <span class="pill pill-type-{{ o.order_type.value }}">
+                        {{ o.order_type|pretty }}
+                    </span>
+                </td>
+                <td>{{ o.created_at.strftime('%Y-%m-%d %H:%M') if o.created_at else '—' }}</td>
+            </tr>
+            {% endfor %}
+            {% if not orders %}
+            <tr>
+                <td colspan="7" class="text-center">No work orders yet</td>
+            </tr>
+            {% endif %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<section class="panel">
+    <div class="panel-header">
+        <h3>📦 Procurement Requests from Manufacturing</h3>
+        <p class="panel-subtitle">
+            Requests raised by Manufacturing that require Procurement + Management review
+        </p>
+    </div>
+    <div class="table-wrapper">
+        <table>
+            <thead>
+            <tr>
+                <th>Request ID</th>
+                <th>Title</th>
+                <th>Qty</th>
+                <th>Unit</th>
+                <th>Status</th>
+                <th>Vendor</th>
+                <th>Actions</th>
+            </tr>
+            </thead>
+            <tbody>
+            {% for r in pending_reqs %}
+            <tr>
+                <td><strong>{{ r.display_id or ('#' ~ r.id) }}</strong></td>
+                <td title="{{ r.title }}"><strong>{{ r.title }}</strong></td>
+                <td><strong>{{ r.quantity }}</strong></td>
+                <td>{{ r.unit }}</td>
+                <td>
+                    <span class="pill pill-status-new">{{ r.status|pretty }}</span>
+                </td>
+                <td>
+                    <span class="muted">Select on approve</span>
+                </td>
+                <td>
+                    <div class="action-buttons">
+                        <form action="/procurement-request/{{ r.id }}/approve" method="post" class="inline-form">
+                            <select name="vendor_id">
+                                <option value="0">Choose vendor…</option>
+                                {% for v in vendors %}
+                                <option value="{{ v.id }}">{{ v.name }}</option>
+                                {% endfor %}
+                            </select>
+                            <button type="submit" class="btn btn-small btn-success">✓ Approve</button>
+                        </form>
+                        <form action="/procurement-request/{{ r.id }}/reject" method="post" class="inline-form">
+                            <button type="submit" class="btn btn-small btn-danger">✗ Reject</button>
+                        </form>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+            {% if not pending_reqs %}
+            <tr>
+                <td colspan="7" class="text-center">No pending requests from Manufacturing</td>
+            </tr>
+            {% endif %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="panel-footer">
+        <p class="panel-subtitle">
+            <strong>Updated Workflow:</strong>
+            <span class="pill pill-role-procurement">Procurement</span>
+            <span style="color: #64748b;">→</span>
+            <span class="pill pill-role-inventory">Inventory (Raw)</span>
+            <span style="color: #64748b; margin: 0 12px;">|</span>
+            <span class="pill pill-role-manufacturing">Manufacturing</span>
+            <span style="color: #64748b;">→</span>
+            <span class="pill pill-role-qa">Quality</span>
+            <span style="color: #64748b;">→</span>
+            <span class="pill pill-role-packaging">Packaging</span>
+            <span style="color: #64748b;">→</span>
+            <span class="pill pill-role-inventory">Inventory (Delivery)</span>
+        </p>
+    </div>
+</section>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const roleSelect = document.getElementById('assigned_role');
+    const vendorField = document.getElementById('vendor-field');
+    const recipeField = document.getElementById('recipe-field');
+    const categoryExisting = document.getElementById('category_existing');
+    const categoryNew = document.getElementById('category_new');
+    const titleField = document.getElementById('title-field');
+    const descriptionField = document.getElementById('description-field');
+
+    // Show/hide fields based on role
+    function updateFieldsVisibility() {
+        const role = roleSelect.value;
+        
+        // Show vendor field only for procurement
+        if (role === 'procurement') {
+            vendorField.style.display = '';
+        } else {
+            vendorField.style.display = 'none';
+        }
+        
+        // Show recipe field only for manufacturing
+        if (role === 'manufacturing') {
+            recipeField.style.display = '';
+        } else {
+            recipeField.style.display = 'none';
+        }
+    }
+
+    // Show/hide title and description based on order category
+    function updateCategoryFields() {
+        const isNew = categoryNew.checked;
+        
+        if (isNew) {
+            titleField.style.display = '';
+            descriptionField.style.display = '';
+            // Make title required for new orders
+            document.getElementById('title').required = true;
+        } else {
+            titleField.style.display = 'none';
+            descriptionField.style.display = 'none';
+            document.getElementById('title').required = false;
+        }
+    }
+
+    roleSelect.addEventListener('change', updateFieldsVisibility);
+    categoryExisting.addEventListener('change', updateCategoryFields);
+    categoryNew.addEventListener('change', updateCategoryFields);
+    
+    updateFieldsVisibility();
+    updateCategoryFields();
+});
+</script>
+
+{% endblock %}

@@ -19,6 +19,8 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Boolean,
+    Text,
+    Float,
 )
 from sqlalchemy.orm import sessionmaker, declarative_base, Session, relationship
 from datetime import datetime
@@ -27,7 +29,7 @@ from pydantic import BaseModel
 
 # ------------------ DATABASE SETUP ------------------ #
 
-DATABASE_URL = "sqlite:///./factory.db"   # For demo; switch to Postgres/MySQL in prod
+DATABASE_URL = "sqlite:///./factory.db"
 
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -46,21 +48,35 @@ class RoleEnum(str, enum.Enum):
 
 
 class WorkOrderStatus(str, enum.Enum):
-    # Generic statuses
     new = "new"
     in_progress = "in_progress"
-    waiting_qc = "waiting_qc"   # kept for compatibility, not really used now
+    procured = "procured"  # NEW: For procurement items
+    waiting_qc = "waiting_qc"
     completed = "completed"
     rejected = "rejected"
-    # Department / special
-    testing = "testing"      # QA
-    failed = "failed"        # QA
-    packing = "packing"      # Packaging
-    packed = "packed"        # Packaging
-    on_shelf = "on_shelf"    # Inventory
-    shipped = "shipped"      # Inventory
-    expired = "expired"      # Inventory
-    blocked = "blocked"      # Blocked by dependency
+    testing = "testing"
+    failed = "failed"
+    packing = "packing"
+    packed = "packed"
+    on_shelf = "on_shelf"
+    shipped = "shipped"
+    expired = "expired"
+    blocked = "blocked"
+
+
+class OrderType(str, enum.Enum):
+    bulk = "bulk"
+    instant = "instant"
+
+
+class OrderCategory(str, enum.Enum):
+    new = "new"  # New order with title/description
+    existing = "existing"  # Existing order using recipe
+
+
+class ItemType(str, enum.Enum):
+    raw = "raw"  # Raw materials (from procurement/manufacturing requests)
+    delivery = "delivery"  # Delivery items (from packaging)
 
 
 class ProcurementRequestStatus(str, enum.Enum):
@@ -73,7 +89,7 @@ class User(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String, unique=True, index=True, nullable=False)
-    password = Column(String, nullable=False)    # DEMO ONLY
+    password = Column(String, nullable=False)
     role = Column(Enum(RoleEnum), nullable=False)
 
 
@@ -90,22 +106,39 @@ class Vendor(Base):
     workorders = relationship("WorkOrder", back_populates="vendor")
 
 
+class Recipe(Base):
+    __tablename__ = "recipes"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False, unique=True)
+    description = Column(Text, nullable=True)
+    ingredients = Column(Text, nullable=True)
+    instructions = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class WorkOrder(Base):
     __tablename__ = "workorders"
     id = Column(Integer, primary_key=True, index=True)
-    # Human-friendly ID: MGMT / FTRY / PROC / QUAL / PACK / INVN + DDMMYYYYHHMM
     display_id = Column(String, index=True, nullable=True)
-    title = Column(String, nullable=False)
+    title = Column(String, nullable=True)  # Nullable for existing orders
     description = Column(String, nullable=True)
     status = Column(Enum(WorkOrderStatus), default=WorkOrderStatus.new)
+    blocked_reason = Column(Text, nullable=True)
+    order_type = Column(Enum(OrderType), default=OrderType.instant)
+    order_category = Column(Enum(OrderCategory), default=OrderCategory.existing)
+    item_type = Column(Enum(ItemType), default=ItemType.delivery)
+    recipe_id = Column(Integer, ForeignKey("recipes.id"), nullable=True)
+    packaging_size_gm = Column(Float, nullable=True)  # NEW: Packaging size in grams
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow)
     assigned_role = Column(Enum(RoleEnum), nullable=False)
     vendor_id = Column(Integer, ForeignKey("vendors.id"), nullable=True)
     quantity = Column(Integer, default=1)
-    unit = Column(String, default="Count")  # KG / Count / Litres
+    unit = Column(String, default="Count")
 
     vendor = relationship("Vendor", back_populates="workorders")
+    recipe = relationship("Recipe")
 
 
 class InventoryItem(Base):
@@ -119,27 +152,19 @@ class InventoryItem(Base):
 class ProcurementRequest(Base):
     __tablename__ = "procurement_requests"
     id = Column(Integer, primary_key=True, index=True)
-    # Human-friendly ID for requests, e.g. REQ221120251912
     display_id = Column(String, index=True, nullable=True)
-
     title = Column(String, nullable=False)
     description = Column(String, nullable=True)
     quantity = Column(Integer, default=1)
-    unit = Column(String, default="Count")  # KG / Count / Litres
-
-    # Manufacturing task that depends on this procurement
+    unit = Column(String, default="Count")
     dependency_workorder_id = Column(Integer, ForeignKey("workorders.id"), nullable=True)
-
-    # Linked procurement work order created after approval
     procurement_workorder_id = Column(Integer, ForeignKey("workorders.id"), nullable=True)
-
     status = Column(Enum(ProcurementRequestStatus), default=ProcurementRequestStatus.pending)
     created_by_role = Column(Enum(RoleEnum), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     decided_at = Column(DateTime, nullable=True)
 
 
-# relationship from ProcurementRequest to its procurement WorkOrder
 ProcurementRequest.procurement_workorder = relationship(
     "WorkOrder",
     foreign_keys=[ProcurementRequest.procurement_workorder_id],
@@ -156,21 +181,21 @@ class UserLogin(BaseModel):
 
 
 class WorkOrderCreate(BaseModel):
-    title: str
+    title: str | None = None
     description: str | None = None
     assigned_role: RoleEnum
     vendor_id: int | None = None
     quantity: int = 1
     unit: str = "Count"
+    order_type: OrderType = OrderType.instant
+    order_category: OrderCategory = OrderCategory.existing
+    recipe_id: int | None = None
+    packaging_size_gm: float | None = None
 
 
 class WorkOrderUpdateStatus(BaseModel):
     status: WorkOrderStatus
-
-
-class InventoryUpdate(BaseModel):
-    item_id: int
-    quantity: int
+    blocked_reason: str | None = None
 
 
 # ------------------ FASTAPI APP INIT ------------------ #
@@ -184,10 +209,6 @@ templates = Jinja2Templates(directory="templates")
 # ------------------ ID GENERATION ------------------ #
 
 def generate_display_id(source: str, role: RoleEnum | None = None) -> str:
-    """
-    Create IDs like MGMT221120251912, FTRY221120251912, REQ221120251912.
-    source examples: "dashboard", "role", "api", "request".
-    """
     now = datetime.now()
     ts = now.strftime("%d%m%Y%H%M")
 
@@ -214,42 +235,54 @@ def generate_display_id(source: str, role: RoleEnum | None = None) -> str:
     return f"{prefix}{ts}"
 
 
-# ------------------ ROLE-SPECIFIC STATUS OPTIONS ------------------ #
+# ------------------ STATUS OPTIONS ------------------ #
 
-def get_status_options_for_role(role: RoleEnum):
-    """Return department-specific status options."""
-    if role == RoleEnum.qa:
-        return [
-            ("new", "New"),
-            ("testing", "Testing"),
-            ("completed", "Passed"),
-            ("failed", "Failed"),
-        ]
+def get_next_status_buttons(role: RoleEnum, current_status: WorkOrderStatus):
+    """Return next status button options for the role"""
+    if role == RoleEnum.procurement:
+        if current_status == WorkOrderStatus.new:
+            return [("in_progress", "Start Work", "warning")]
+        elif current_status == WorkOrderStatus.in_progress:
+            return [("procured", "Mark Procured", "success"), ("rejected", "Mark Rejected", "danger")]
+        elif current_status in [WorkOrderStatus.procured, WorkOrderStatus.rejected]:
+            return []
+    
+    elif role == RoleEnum.qa:
+        if current_status == WorkOrderStatus.new:
+            return [("testing", "Start Testing", "warning")]
+        elif current_status == WorkOrderStatus.testing:
+            return [("completed", "Mark Passed", "success"), ("failed", "Mark Failed", "danger")]
+        elif current_status in [WorkOrderStatus.completed, WorkOrderStatus.failed]:
+            return []
+    
     elif role == RoleEnum.packaging:
-        return [
-            ("new", "New"),
-            ("packing", "Packing"),
-            ("packed", "Packed"),
-        ]
+        if current_status == WorkOrderStatus.new:
+            return [("packing", "Start Packing", "warning")]
+        elif current_status == WorkOrderStatus.packing:
+            return [("packed", "Mark Packed", "success")]
+        elif current_status == WorkOrderStatus.packed:
+            return []
+    
     elif role == RoleEnum.inventory:
-        return [
-            ("new", "Received"),
-            ("on_shelf", "On Shelf"),
-            ("shipped", "Shipped"),
-            ("expired", "Expired"),
-        ]
-    else:
-        # Default for procurement, manufacturing
-        return [
-            ("new", "New"),
-            ("in_progress", "In Progress"),
-            ("blocked", "Blocked"),
-            ("completed", "Completed"),
-            ("rejected", "Rejected"),
-        ]
+        if current_status == WorkOrderStatus.new:
+            return [("on_shelf", "Place on Shelf", "info")]
+        elif current_status == WorkOrderStatus.on_shelf:
+            return [("shipped", "Mark Shipped", "success"), ("expired", "Mark Expired", "danger")]
+        elif current_status in [WorkOrderStatus.shipped, WorkOrderStatus.expired]:
+            return []
+    
+    else:  # manufacturing
+        if current_status == WorkOrderStatus.new:
+            return [("in_progress", "Start Work", "warning")]
+        elif current_status == WorkOrderStatus.in_progress:
+            return [("completed", "Mark Completed", "success"), ("rejected", "Mark Rejected", "danger")]
+        elif current_status in [WorkOrderStatus.completed, WorkOrderStatus.rejected]:
+            return []
+    
+    return []
 
 
-# ---- Jinja filter to show enums nicely ---- #
+# ---- Jinja filter ---- #
 
 def pretty_enum(value):
     if isinstance(value, enum.Enum):
@@ -259,18 +292,16 @@ def pretty_enum(value):
 
     raw_lower = raw.lower()
 
-    role_labels = {
+    labels = {
         "procurement": "Procurement",
         "manufacturing": "Manufacturing",
         "qa": "Quality Assurance",
         "packaging": "Packaging",
         "inventory": "Inventory",
         "management": "Management",
-    }
-
-    status_labels = {
         "new": "New",
         "in_progress": "In Progress",
+        "procured": "Procured",
         "waiting_qc": "Waiting QC",
         "completed": "Completed",
         "rejected": "Rejected",
@@ -282,14 +313,14 @@ def pretty_enum(value):
         "shipped": "Shipped",
         "expired": "Expired",
         "blocked": "Blocked",
+        "bulk": "Bulk",
+        "instant": "Instant",
+        "existing": "Existing",
+        "raw": "Raw Material",
+        "delivery": "Delivery Item",
     }
 
-    if raw_lower in role_labels:
-        return role_labels[raw_lower]
-    if raw_lower in status_labels:
-        return status_labels[raw_lower]
-
-    return raw.replace("_", " ").title()
+    return labels.get(raw_lower, raw.replace("_", " ").title())
 
 
 templates.env.filters["pretty"] = pretty_enum
@@ -305,7 +336,7 @@ def get_db():
         db.close()
 
 
-# ------------------ SIMPLE AUTH (for API) ------------------ #
+# ------------------ AUTH ------------------ #
 
 def authenticate_user(db: Session, username: str, password: str):
     return db.query(User).filter(User.username == username, User.password == password).first()
@@ -331,10 +362,10 @@ def seed_users():
 seed_users()
 
 
-# ------------------ HELPER: STAGE PROGRESSION ------------------ #
+# ------------------ STAGE PROGRESSION ------------------ #
 
 def is_completion_for_role(role: RoleEnum, status: WorkOrderStatus) -> bool:
-    if role == RoleEnum.procurement and status == WorkOrderStatus.completed:
+    if role == RoleEnum.procurement and status == WorkOrderStatus.procured:
         return True
     if role == RoleEnum.manufacturing and status == WorkOrderStatus.completed:
         return True
@@ -346,29 +377,33 @@ def is_completion_for_role(role: RoleEnum, status: WorkOrderStatus) -> bool:
 
 
 def apply_stage_progression(wo: WorkOrder, new_status: WorkOrderStatus):
-    """
-    Automatic flow with department-specific completion statuses.
-    """
+    """Updated workflow: Procurement -> Inventory (raw), Manufacturing -> QA -> Packaging -> Inventory (delivery)"""
     wo.status = new_status
 
     if not is_completion_for_role(wo.assigned_role, new_status):
         return
 
     if wo.assigned_role == RoleEnum.procurement:
-        wo.assigned_role = RoleEnum.manufacturing
+        # Procurement items go directly to Inventory as raw materials
+        wo.assigned_role = RoleEnum.inventory
         wo.status = WorkOrderStatus.new
+        wo.item_type = ItemType.raw
     elif wo.assigned_role == RoleEnum.manufacturing:
+        # Manufacturing items are raw materials, go to QA
         wo.assigned_role = RoleEnum.qa
         wo.status = WorkOrderStatus.new
+        wo.item_type = ItemType.raw
     elif wo.assigned_role == RoleEnum.qa:
         wo.assigned_role = RoleEnum.packaging
         wo.status = WorkOrderStatus.new
     elif wo.assigned_role == RoleEnum.packaging:
+        # Packaging items become delivery items
         wo.assigned_role = RoleEnum.inventory
         wo.status = WorkOrderStatus.new
+        wo.item_type = ItemType.delivery
 
 
-# ------------------ API ENDPOINTS (for Android & integrations) ------------------ #
+# ------------------ API ENDPOINTS ------------------ #
 
 @app.post("/api/login")
 def api_login(credentials: UserLogin, db: Session = Depends(get_db)):
@@ -394,55 +429,7 @@ def api_list_workorders(role: RoleEnum | None = None, db: Session = Depends(get_
     return orders
 
 
-@app.post("/api/workorders")
-def api_create_workorder(order: WorkOrderCreate, db: Session = Depends(get_db)):
-    wo = WorkOrder(
-        display_id=generate_display_id("role", order.assigned_role),
-        title=order.title,
-        description=order.description,
-        assigned_role=order.assigned_role,
-        status=WorkOrderStatus.new,
-        vendor_id=order.vendor_id,
-        quantity=max(1, order.quantity),
-        unit=order.unit or "Count",
-    )
-    db.add(wo)
-    db.commit()
-    db.refresh(wo)
-    return wo
-
-
-@app.patch("/api/workorders/{order_id}/status")
-def api_update_workorder_status(order_id: int, status_update: WorkOrderUpdateStatus,
-                                db: Session = Depends(get_db)):
-    wo = db.query(WorkOrder).filter(WorkOrder.id == order_id).first()
-    if not wo:
-        return {"success": False, "message": "WorkOrder not found"}
-
-    apply_stage_progression(wo, status_update.status)
-    wo.updated_at = datetime.utcnow()
-    db.commit()
-    db.refresh(wo)
-    return {"success": True, "workorder": wo}
-
-
-@app.get("/api/inventory")
-def api_list_inventory(db: Session = Depends(get_db)):
-    items = db.query(InventoryItem).all()
-    return items
-
-
-@app.post("/api/inventory/update")
-def api_update_inventory(update: InventoryUpdate, db: Session = Depends(get_db)):
-    item = db.query(InventoryItem).filter(InventoryItem.id == update.item_id).first()
-    if not item:
-        return {"success": False, "message": "Item not found"}
-    item.quantity = update.quantity
-    db.commit()
-    return {"success": True}
-
-
-# ------------------ WEB PAGES (Dashboard + Role Views) ------------------ #
+# ------------------ WEB PAGES ------------------ #
 
 @app.get("/", response_class=HTMLResponse)
 def dashboard(
@@ -453,7 +440,6 @@ def dashboard(
     total = db.query(WorkOrder).count()
     new = db.query(WorkOrder).filter(WorkOrder.status == WorkOrderStatus.new).count()
     in_progress = db.query(WorkOrder).filter(WorkOrder.status == WorkOrderStatus.in_progress).count()
-    waiting_qc = db.query(WorkOrder).filter(WorkOrder.status == WorkOrderStatus.waiting_qc).count()
     blocked = db.query(WorkOrder).filter(WorkOrder.status == WorkOrderStatus.blocked).count()
     completed = db.query(WorkOrder).filter(WorkOrder.status == WorkOrderStatus.completed).count()
     rejected = db.query(WorkOrder).filter(WorkOrder.status == WorkOrderStatus.rejected).count()
@@ -471,6 +457,7 @@ def dashboard(
     orders = q.limit(50).all()
 
     vendors = db.query(Vendor).filter(Vendor.is_active == True).order_by(Vendor.name).all()
+    recipes = db.query(Recipe).order_by(Recipe.name).all()
 
     pending_reqs = (
         db.query(ProcurementRequest)
@@ -485,7 +472,6 @@ def dashboard(
             "total": total,
             "new": new,
             "in_progress": in_progress,
-            "waiting_qc": waiting_qc,
             "blocked": blocked,
             "completed": completed,
             "rejected": rejected,
@@ -493,39 +479,60 @@ def dashboard(
         "orders": orders,
         "selected_status": selected_status,
         "vendors": vendors,
+        "recipes": recipes,
         "pending_reqs": pending_reqs,
     })
 
 
 @app.post("/create-order")
 def create_order_web(
-    title: str = Form(...),
-    description: str = Form(""),
+    order_category: OrderCategory = Form(...),
+    title: str = Form(default=""),
+    description: str = Form(default=""),
     assigned_role: RoleEnum = Form(...),
     vendor_id: int | None = Form(default=None),
     quantity: int = Form(default=1),
     unit: str = Form(default="Count"),
+    order_type: OrderType = Form(default=OrderType.instant),
+    recipe_id: int | None = Form(default=None),
+    packaging_size_gm: float = Form(default=50),
     db: Session = Depends(get_db),
 ):
     if vendor_id == 0:
         vendor_id = None
+    if recipe_id == 0:
+        recipe_id = None
+    
     qty = max(1, quantity)
+    
+    # For existing orders, generate title from recipe if available
+    final_title = title
+    if order_category == OrderCategory.existing and recipe_id:
+        recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
+        if recipe:
+            final_title = recipe.name
+    
     wo = WorkOrder(
         display_id=generate_display_id("dashboard"),
-        title=title,
+        title=final_title if final_title else "Untitled Order",
         description=description,
         assigned_role=assigned_role,
         status=WorkOrderStatus.new,
         vendor_id=vendor_id,
         quantity=qty,
         unit=unit or "Count",
+        order_type=order_type,
+        order_category=order_category,
+        recipe_id=recipe_id,
+        packaging_size_gm=packaging_size_gm,
+        item_type=ItemType.delivery,  # Default to delivery
     )
     db.add(wo)
     db.commit()
     return RedirectResponse(url="/", status_code=303)
 
 
-# -------- Manufacturing Procurement Requests (WEB) -------- #
+# -------- Procurement Requests -------- #
 
 @app.post("/procurement-request")
 def create_procurement_request(
@@ -575,7 +582,7 @@ def approve_procurement_request(
             desc = f"{desc} ({detail})" if desc else detail
 
         wo = WorkOrder(
-            display_id=generate_display_id("dashboard"),  # created via dashboard approval
+            display_id=generate_display_id("dashboard"),
             title=req.title,
             description=desc,
             assigned_role=RoleEnum.procurement,
@@ -583,25 +590,20 @@ def approve_procurement_request(
             vendor_id=vendor_id,
             quantity=req.quantity or 1,
             unit=req.unit or "Count",
+            item_type=ItemType.raw,  # Procurement items are raw materials
         )
         db.add(wo)
-        db.flush()  # to get wo.id and wo.display_id
+        db.flush()
 
-        # Link this request to its procurement work order
         req.procurement_workorder_id = wo.id
 
-        # If there is a dependency task, mark it blocked with reason
         if req.dependency_workorder_id:
             dep_wo = db.query(WorkOrder).filter(
                 WorkOrder.id == req.dependency_workorder_id
             ).first()
             if dep_wo:
                 dep_wo.status = WorkOrderStatus.blocked
-                blocked_reason = f"Waiting for procurement task {wo.display_id}"
-                if dep_wo.description:
-                    dep_wo.description += f" | {blocked_reason}"
-                else:
-                    dep_wo.description = blocked_reason
+                dep_wo.blocked_reason = f"Waiting for procurement task {wo.display_id}"
 
         db.commit()
     return RedirectResponse(url="/", status_code=303)
@@ -617,11 +619,11 @@ def reject_procurement_request(req_id: int, db: Session = Depends(get_db)):
     return RedirectResponse(url="/", status_code=303)
 
 
-# -------- Vendors (WEB) with password-protected page -------- #
+# -------- Vendors -------- #
 
 VENDOR_PASSWORD = "Mrudu"
 VENDOR_COOKIE_NAME = "vendor_auth"
-VENDOR_COOKIE_MAX_AGE = 30 * 60  # 30 minutes
+VENDOR_COOKIE_MAX_AGE = 30 * 60
 
 
 @app.get("/vendors", response_class=HTMLResponse)
@@ -691,7 +693,46 @@ def create_vendor(
     return RedirectResponse(url="/vendors", status_code=303)
 
 
-# -------- ROLE PAGES (procurement, manufacturing, QA, packaging, inventory) -------- #
+# -------- Recipes -------- #
+
+@app.get("/recipes", response_class=HTMLResponse)
+def recipe_list(request: Request, db: Session = Depends(get_db)):
+    recipes = db.query(Recipe).order_by(Recipe.name).all()
+    return templates.TemplateResponse("recipe_list.html", {
+        "request": request,
+        "recipes": recipes,
+    })
+
+
+@app.post("/create-recipe")
+def create_recipe(
+    name: str = Form(...),
+    description: str = Form(""),
+    ingredients: str = Form(""),
+    instructions: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    recipe = Recipe(
+        name=name,
+        description=description or None,
+        ingredients=ingredients or None,
+        instructions=instructions or None,
+    )
+    db.add(recipe)
+    db.commit()
+    return RedirectResponse(url="/recipes", status_code=303)
+
+
+@app.post("/delete-recipe/{recipe_id}")
+def delete_recipe(recipe_id: int, db: Session = Depends(get_db)):
+    recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
+    if recipe:
+        db.delete(recipe)
+        db.commit()
+    return RedirectResponse(url="/recipes", status_code=303)
+
+
+# -------- Role Pages -------- #
 
 @app.get("/role/{role}", response_class=HTMLResponse)
 def role_view(role: RoleEnum, request: Request, db: Session = Depends(get_db)):
@@ -711,14 +752,25 @@ def role_view(role: RoleEnum, request: Request, db: Session = Depends(get_db)):
             .all()
         )
 
-    status_options = get_status_options_for_role(role)
+    order_actions = {}
+    for order in orders:
+        order_actions[order.id] = get_next_status_buttons(role, order.status)
+
+    # For inventory, separate into raw and delivery items
+    raw_items = []
+    delivery_items = []
+    if role == RoleEnum.inventory:
+        raw_items = [o for o in orders if o.item_type == ItemType.raw]
+        delivery_items = [o for o in orders if o.item_type == ItemType.delivery]
 
     return templates.TemplateResponse("role_view.html", {
         "request": request,
         "role": role,
         "orders": orders,
+        "raw_items": raw_items,
+        "delivery_items": delivery_items,
         "manufacturing_reqs": manufacturing_reqs,
-        "status_options": status_options,
+        "order_actions": order_actions,
     })
 
 
@@ -728,6 +780,7 @@ def role_update_status(
     order_id: int = Form(...),
     status: WorkOrderStatus = Form(...),
     qty_done: str = Form(default=""),
+    blocked_reason: str = Form(default=""),
     db: Session = Depends(get_db),
 ):
     wo = db.query(WorkOrder).filter(WorkOrder.id == order_id).first()
@@ -735,6 +788,13 @@ def role_update_status(
         return RedirectResponse(url=f"/role/{role.value}", status_code=303)
 
     total = wo.quantity or 1
+
+    if status == WorkOrderStatus.blocked:
+        wo.status = WorkOrderStatus.blocked
+        wo.blocked_reason = blocked_reason or "No reason provided"
+        wo.updated_at = datetime.utcnow()
+        db.commit()
+        return RedirectResponse(url=f"/role/{role.value}", status_code=303)
 
     is_complete = is_completion_for_role(role, status)
 
@@ -760,6 +820,11 @@ def role_update_status(
                 vendor_id=wo.vendor_id,
                 quantity=remaining,
                 unit=wo.unit,
+                order_type=wo.order_type,
+                order_category=wo.order_category,
+                recipe_id=wo.recipe_id,
+                packaging_size_gm=wo.packaging_size_gm,
+                item_type=wo.item_type,
             )
             db.add(remaining_wo)
 
