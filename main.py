@@ -730,7 +730,294 @@ def delete_recipe(recipe_id: int, db: Session = Depends(get_db)):
         db.delete(recipe)
         db.commit()
     return RedirectResponse(url="/recipes", status_code=303)
+# Add this route to your existing main.py file
+# Insert it after the recipe routes and before role pages
 
+@app.get("/help/{page}", response_class=HTMLResponse)
+def help_page(page: str, request: Request):
+    """Dynamic help page based on current page context"""
+    
+    help_data = {
+        "dashboard": {
+            "title": "Dashboard Help",
+            "icon": "📊",
+            "sections": [
+                {
+                    "title": "Work Order Metrics",
+                    "content": "These metric cards show you the status of all work orders at a glance. Click any metric to filter the work orders table below.",
+                    "tips": [
+                        "All Orders: Total number of orders in the system",
+                        "New: Orders that haven't been started yet",
+                        "In Progress: Currently being worked on",
+                        "Blocked: Orders waiting for dependencies",
+                        "Completed: Successfully finished orders",
+                        "Rejected: Orders that didn't meet criteria"
+                    ]
+                },
+                {
+                    "title": "Create Work Order",
+                    "content": "Use this form to create new work orders for any department.",
+                    "tips": [
+                        "Order Category: Choose 'Existing' for recipe-based orders or 'New' for custom orders",
+                        "Order Type: Select 'Instant' for urgent orders or 'Bulk' for larger batches",
+                        "Packaging Size: Set the package size in grams (10-1000 gm, steps of 5)",
+                        "Assign To: Choose which department should handle this order"
+                    ]
+                },
+                {
+                    "title": "Procurement Requests",
+                    "content": "Manufacturing can raise procurement requests when raw materials are needed. Management reviews and approves/rejects these requests.",
+                    "tips": []
+                }
+            ]
+        },
+        "procurement": {
+            "title": "Procurement Help",
+            "icon": "🛒",
+            "sections": [
+                {
+                    "title": "Procurement Workflow",
+                    "content": "Procurement handles sourcing raw materials from vendors. Items go directly to Inventory as raw materials when marked as 'Procured'.",
+                    "tips": [
+                        "New: Order received, ready to start",
+                        "In Progress: Actively sourcing materials",
+                        "Procured: Materials acquired, moves to Inventory (Raw Materials)",
+                        "Rejected: Order couldn't be fulfilled"
+                    ]
+                },
+                {
+                    "title": "Working with Vendors",
+                    "content": "Each procurement order can be assigned to a specific vendor for tracking purposes.",
+                    "tips": [
+                        "Select vendor when creating the order or during processing",
+                        "Vendor information helps track supplier performance",
+                        "Manage vendors through the 'Manage Vendors' navigation link"
+                    ]
+                },
+                {
+                    "title": "Status Actions",
+                    "content": "Use the action buttons to update order status:",
+                    "tips": [
+                        "'Start Work' (orange) - Begin procurement process",
+                        "'Mark Procured' (green) - Materials acquired, sends to Inventory",
+                        "'Mark Rejected' (red) - Order cannot be fulfilled",
+                        "'Block' (red) - Temporarily halt order with reason"
+                    ]
+                }
+            ]
+        },
+        "manufacturing": {
+            "title": "Manufacturing Help",
+            "icon": "⚙️",
+            "sections": [
+                {
+                    "title": "Manufacturing Workflow",
+                    "content": "Manufacturing produces raw material items that need QA testing. Completed items move to Quality Assurance.",
+                    "tips": [
+                        "New: Order received, ready to manufacture",
+                        "In Progress: Currently in production",
+                        "Completed: Production finished, moves to QA",
+                        "Rejected: Production failed or cancelled"
+                    ]
+                },
+                {
+                    "title": "Using Recipes",
+                    "content": "Manufacturing orders can be linked to recipes from the Recipe Bank for standardized production.",
+                    "tips": [
+                        "Existing orders automatically use recipe specifications",
+                        "View recipe details in the Recipe Bank",
+                        "Follow recipe instructions for consistent quality"
+                    ]
+                },
+                {
+                    "title": "Procurement Requests",
+                    "content": "Request raw materials when needed:",
+                    "tips": [
+                        "Fill out the procurement request form",
+                        "Optionally link to a manufacturing task that depends on it",
+                        "Management will review and approve/reject",
+                        "Track your requests in the 'My Procurement Requests' table"
+                    ]
+                }
+            ]
+        },
+        "qa": {
+            "title": "Quality Assurance Help",
+            "icon": "🔍",
+            "sections": [
+                {
+                    "title": "QA Workflow",
+                    "content": "Quality Assurance tests products from Manufacturing before they proceed to Packaging.",
+                    "tips": [
+                        "New: Item received from Manufacturing, ready for testing",
+                        "Testing: Currently inspecting product",
+                        "Passed (Completed): QA approved, moves to Packaging",
+                        "Failed: QA rejected, item doesn't meet standards"
+                    ]
+                },
+                {
+                    "title": "Testing Process",
+                    "content": "Follow these steps for quality inspection:",
+                    "tips": [
+                        "Click 'Start Testing' to begin inspection",
+                        "Verify product meets all quality standards",
+                        "Use 'Mark Passed' if item passes all checks",
+                        "Use 'Mark Failed' if item doesn't meet criteria",
+                        "Document any defects in the description field"
+                    ]
+                },
+                {
+                    "title": "Quantity Handling",
+                    "content": "When marking items as Passed or Failed:",
+                    "tips": [
+                        "Enter the quantity that passed/failed",
+                        "Remaining quantity automatically creates a new task",
+                        "This allows partial approvals in large batches"
+                    ]
+                }
+            ]
+        },
+        "packaging": {
+            "title": "Packaging Help",
+            "icon": "📦",
+            "sections": [
+                {
+                    "title": "Packaging Workflow",
+                    "content": "Packaging handles final product preparation. Packed items move to Inventory as delivery items.",
+                    "tips": [
+                        "New: Item received from QA, ready to package",
+                        "Packing: Currently packaging product",
+                        "Packed: Packaging complete, moves to Inventory (Delivery Items)"
+                    ]
+                },
+                {
+                    "title": "Packaging Process",
+                    "content": "Steps for packaging products:",
+                    "tips": [
+                        "Click 'Start Packing' to begin",
+                        "Ensure proper packaging materials are used",
+                        "Label packages clearly",
+                        "Verify packaging size matches order specifications",
+                        "Click 'Mark Packed' when complete"
+                    ]
+                },
+                {
+                    "title": "Packaging Size",
+                    "content": "Each order has a specified packaging size in grams. This information is shown in the Inventory delivery items tab.",
+                    "tips": []
+                }
+            ]
+        },
+        "inventory": {
+            "title": "Inventory Help",
+            "icon": "🏪",
+            "sections": [
+                {
+                    "title": "Two Types of Inventory",
+                    "content": "Inventory is divided into two categories with separate tabs:",
+                    "tips": [
+                        "Raw Materials: Items from Procurement and Manufacturing requests",
+                        "Delivery Items: Finished products from Packaging ready for customers"
+                    ]
+                },
+                {
+                    "title": "Raw Materials Tab",
+                    "content": "Manage raw materials and components:",
+                    "tips": [
+                        "Received (New): Material arrived from Procurement",
+                        "On Shelf: Stored in warehouse",
+                        "Shipped: Sent to production or other location",
+                        "Expired: Material passed expiration date"
+                    ]
+                },
+                {
+                    "title": "Delivery Items Tab",
+                    "content": "Manage finished products ready for delivery:",
+                    "tips": [
+                        "Received (New): Product arrived from Packaging",
+                        "On Shelf: Stored and ready for shipment",
+                        "Shipped: Delivered to customer",
+                        "Expired: Product passed expiration date",
+                        "Packaging size is displayed for each item"
+                    ]
+                },
+                {
+                    "title": "Status Actions",
+                    "content": "Use action buttons to manage inventory:",
+                    "tips": [
+                        "'Place on Shelf' (blue) - Store item in warehouse",
+                        "'Mark Shipped' (green) - Item delivered to customer",
+                        "'Mark Expired' (red) - Item passed expiration"
+                    ]
+                }
+            ]
+        },
+        "vendors": {
+            "title": "Vendor Management Help",
+            "icon": "🏢",
+            "sections": [
+                {
+                    "title": "Managing Vendors",
+                    "content": "The Vendor page helps you manage all supplier information in one place.",
+                    "tips": [
+                        "Vendor Name: Full company name (required)",
+                        "Contact Person: Main point of contact",
+                        "Phone & Email: Primary contact information",
+                        "Address: Physical location for deliveries"
+                    ]
+                },
+                {
+                    "title": "Using Vendors",
+                    "content": "When creating procurement orders, you can select a vendor from the dropdown. This helps track which suppliers provide which materials.",
+                    "tips": []
+                },
+                {
+                    "title": "Security",
+                    "content": "The vendor page is password-protected. Your session lasts 30 minutes.",
+                    "tips": []
+                }
+            ]
+        },
+        "recipes": {
+            "title": "Recipe Bank Help",
+            "icon": "📖",
+            "sections": [
+                {
+                    "title": "Recipe Management",
+                    "content": "The Recipe Bank stores standardized manufacturing processes that can be reused for consistent production.",
+                    "tips": [
+                        "Recipe Name: Unique identifier",
+                        "Description: Brief overview of what this recipe produces",
+                        "Ingredients/Materials: List all required raw materials and quantities",
+                        "Instructions: Step-by-step manufacturing process"
+                    ]
+                },
+                {
+                    "title": "Using Recipes",
+                    "content": "When creating a work order:",
+                    "tips": [
+                        "Select 'Existing' as the order category",
+                        "Choose 'Manufacturing' as the assigned department",
+                        "Pick a recipe from the dropdown",
+                        "The order title will automatically use the recipe name"
+                    ]
+                },
+                {
+                    "title": "Best Practices",
+                    "content": "Build a comprehensive recipe library to ensure consistent quality and speed up order creation for recurring products.",
+                    "tips": []
+                }
+            ]
+        }
+    }
+    
+    page_help = help_data.get(page, help_data["dashboard"])
+    
+    return templates.TemplateResponse("help.html", {
+        "request": request,
+        "help": page_help,
+        "page": page
+    })
 
 # -------- Role Pages -------- #
 
