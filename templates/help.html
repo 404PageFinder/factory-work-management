@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+{% block content %}
+
+<section class="page-header">
+    <div>
+        <h2>{{ help.icon }} {{ help.title }}</h2>
+        <p class="page-subtitle">
+            Complete guide and documentation for this section
+        </p>
+    </div>
+    <div class="page-header-actions">
+        <a href="javascript:history.back()" class="btn btn-ghost">← Back</a>
+    </div>
+</section>
+
+<div class="help-container">
+    {% for section in help.sections %}
+    <section class="panel help-section">
+        <div class="panel-header">
+            <h3>{{ section.title }}</h3>
+        </div>
+        
+        <p style="color: #cbd5e1; font-size: 15px; line-height: 1.7; margin-bottom: 16px;">
+            {{ section.content }}
+        </p>
+        
+        {% if section.tips %}
+        <ul style="color: #cbd5e1; font-size: 15px; line-height: 1.8; margin-left: 20px;">
+            {% for tip in section.tips %}
+            <li style="margin-bottom: 8px;">{{ tip }}</li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+    </section>
+    {% endfor %}
+    
+    <!-- Quick Tips Section -->
+    <section class="panel">
+        <div class="panel-header">
+            <h3>💡 Quick Tips</h3>
+        </div>
+        
+        <div class="help-tip" style="margin-bottom: 16px;">
+            <strong>🚫 Blocking Orders</strong>
+            <p>Click the red "Block" button, enter a reason, and confirm. Hover over the ℹ️ icon next to blocked orders to see why they're blocked.</p>
+        </div>
+        
+        <div class="help-tip" style="margin-bottom: 16px;">
+            <strong>📊 Filtering Orders</strong>
+            <p>On the dashboard, click any metric card to filter the work orders table by that status.</p>
+        </div>
+        
+        <div class="help-tip" style="margin-bottom: 16px;">
+            <strong>⚡ Quick Actions</strong>
+            <p>Status buttons show the next logical step based on current status. Green = complete/success, Orange = in progress, Red = reject/fail.</p>
+        </div>
+        
+        <div class="help-tip">
+            <strong>🔄 Quantity Splitting</strong>
+            <p>When completing orders, enter a quantity less than the total to create a split. The remaining quantity automatically creates a new task.</p>
+        </div>
+    </section>
+    
+    <!-- Workflow Reference -->
+    {% if page in ['dashboard', 'procurement', 'manufacturing', 'qa', 'packaging', 'inventory'] %}
+    <section class="panel">
+        <div class="panel-header">
+            <h3>🔄 Workflow Reference</h3>
+        </div>
+        
+        <div style="padding: 16px; background: rgba(59, 130, 246, 0.1); border-radius: 8px; border-left: 4px solid #3b82f6; margin-bottom: 16px;">
+            <strong style="color: #3b82f6; display: block; margin-bottom: 8px;">Raw Materials Path:</strong>
+            <p style="color: #cbd5e1; margin: 0; font-family: monospace;">
+                Procurement → Procured → Inventory (Raw Materials Tab)
+            </p>
+        </div>
+        
+        <div style="padding: 16px; background: rgba(16, 185, 129, 0.1); border-radius: 8px; border-left: 4px solid #10b981;">
+            <strong style="color: #10b981; display: block; margin-bottom: 8px;">Delivery Items Path:</strong>
+            <p style="color: #cbd5e1; margin: 0; font-family: monospace;">
+                Manufacturing → QA → Packaging → Inventory (Delivery Items Tab)
+            </p>
+        </div>
+    </section>
+    {% endif %}
+    
+    <!-- Navigation Help -->
+    <section class="panel">
+        <div class="panel-header">
+            <h3>🧭 Navigation</h3>
+        </div>
+        
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
+            <div style="padding: 12px; background: rgba(59, 130, 246, 0.1); border-radius: 8px;">
+                <strong style="color: #93c5fd; display: block; margin-bottom: 4px;">🏠 Dashboard</strong>
+                <p style="color: #cbd5e1; margin: 0; font-size: 13px;">Operations overview</p>
+            </div>
+            
+            <div style="padding: 12px; background: rgba(59, 130, 246, 0.1); border-radius: 8px;">
+                <strong style="color: #93c5fd; display: block; margin-bottom: 4px;">🛒 Procurement</strong>
+                <p style="color: #cbd5e1; margin: 0; font-size: 13px;">Material sourcing</p>
+            </div>
+            
+            <div style="padding: 12px; background: rgba(245, 158, 11, 0.1); border-radius: 8px;">
+                <strong style="color: #fbbf24; display: block; margin-bottom: 4px;">⚙️ Manufacturing</strong>
+                <p style="color: #cbd5e1; margin: 0; font-size: 13px;">Production operations</p>
+            </div>
+            
+            <div style="padding: 12px; background: rgba(16, 185, 129, 0.1); border-radius: 8px;">
+                <strong style="color: #6ee7b7; display: block; margin-bottom: 4px;">🔍 Quality</strong>
+                <p style="color: #cbd5e1; margin: 0; font-size: 13px;">QA testing</p>
+            </div>
+            
+            <div style="padding: 12px; background: rgba(139, 92, 246, 0.1); border-radius: 8px;">
+                <strong style="color: #c4b5fd; display: block; margin-bottom: 4px;">📦 Packaging</strong>
+                <p style="color: #cbd5e1; margin: 0; font-size: 13px;">Product packaging</p>
+            </div>
+            
+            <div style="padding: 12px; background: rgba(239, 68, 68, 0.1); border-radius: 8px;">
+                <strong style="color: #fca5a5; display: block; margin-bottom: 4px;">🏪 Inventory</strong>
+                <p style="color: #cbd5e1; margin: 0; font-size: 13px;">Stock management</p>
+            </div>
+            
+            <div style="padding: 12px; background: rgba(100, 116, 139, 0.1); border-radius: 8px;">
+                <strong style="color: #cbd5e1; display: block; margin-bottom: 4px;">📖 Recipe Bank</strong>
+                <p style="color: #cbd5e1; margin: 0; font-size: 13px;">Recipe library</p>
+            </div>
+            
+            <div style="padding: 12px; background: rgba(59, 130, 246, 0.1); border-radius: 8px;">
+                <strong style="color: #93c5fd; display: block; margin-bottom: 4px;">🏢 Vendors</strong>
+                <p style="color: #cbd5e1; margin: 0; font-size: 13px;">Supplier management</p>
+            </div>
+        </div>
+    </section>
+    
+    <!-- Need More Help -->
+    <section class="panel">
+        <div class="panel-header">
+            <h3>🆘 Need More Help?</h3>
+        </div>
+        
+        <p style="color: #cbd5e1; font-size: 15px; line-height: 1.7;">
+            If you're still having trouble or have questions not covered here:
+        </p>
+        
+        <ul style="color: #cbd5e1; font-size: 15px; line-height: 1.8; margin-left: 20px;">
+            <li>Click the <strong>"❓ Help"</strong> button in the navigation for quick access</li>
+            <li>Visit different pages and click Help to see page-specific documentation</li>
+            <li>Take the interactive tour again by clearing your browser data and refreshing</li>
+            <li>Contact your system administrator for technical support</li>
+        </ul>
+        
+        <div style="margin-top: 20px; padding: 16px; background: rgba(16, 185, 129, 0.1); border-radius: 8px; border-left: 4px solid #10b981;">
+            <strong style="color: #10b981;">💚 We're here to help!</strong><br>
+            <p style="color: #cbd5e1; margin: 8px 0 0 0;">
+                The Factory Management System is designed to be intuitive, but don't hesitate to reach out if you need assistance.
+            </p>
+        </div>
+    </section>
+</div>
+
+{% endblock %}
