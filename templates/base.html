@@ -27,6 +27,7 @@
         <a href="/role/inventory" class="nav-item">Inventory</a>
         <a href="/recipes" class="nav-item">Recipe Bank</a>
         <a href="/vendors" class="nav-item nav-item-cta">Manage Vendors</a>
+        <a href="#" class="nav-item nav-item-help" onclick="openHelp(); return false;">❓ Help</a>
     </nav>
 </header>
 
@@ -37,5 +38,389 @@
 <footer class="footer">
     <span>Factory Work Management · Internal tool · Powered by Advanced Manufacturing Tech</span>
 </footer>
+
+<!-- Welcome Tour Modal -->
+<div id="welcomeModal" class="modal tour-modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>👋 Welcome to Factory Management!</h3>
+        </div>
+        <div class="tour-content">
+            <p>Would you like a quick tour of the system?</p>
+            <p>We'll show you the key features in just a few steps:</p>
+            <ul style="margin: 16px 0; padding-left: 20px; color: #cbd5e1;">
+                <li>📊 Metrics Dashboard</li>
+                <li>➕ Create Order Form</li>
+                <li>📦 Work Order Management</li>
+                <li>📖 Recipe Bank & Vendors</li>
+            </ul>
+        </div>
+        <div class="tour-actions">
+            <button class="btn btn-ghost" onclick="skipTour()">Skip Tour</button>
+            <button class="btn btn-primary" onclick="startTour()">Start Tour</button>
+        </div>
+    </div>
+</div>
+
+<!-- Tour Step Modal -->
+<div id="tourModal" class="modal tour-modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 id="tourTitle">Tour Step</h3>
+        </div>
+        <div class="tour-content" id="tourContent">
+            Content here
+        </div>
+        <div class="tour-actions">
+            <button class="btn btn-ghost" onclick="skipTour()">Skip Tour</button>
+            <div style="display: flex; gap: 12px;">
+                <button class="btn btn-info" onclick="previousTourStep()" id="prevBtn" style="display: none;">
+                    ← Previous
+                </button>
+                <button class="btn btn-primary" onclick="nextTourStep()" id="nextBtn">
+                    Next →
+                </button>
+            </div>
+        </div>
+        <div class="tour-progress" id="tourProgress">
+            Step 1 of 4
+        </div>
+    </div>
+</div>
+
+<!-- Help Modal -->
+<div id="helpModal" class="modal">
+    <div class="modal-content" style="max-width: 800px;">
+        <div class="modal-header">
+            <h3>❓ Help & Documentation</h3>
+        </div>
+        <div id="helpContent" class="help-container">
+            <!-- Dynamic help content will be loaded here -->
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-primary" onclick="closeHelp()">Close</button>
+        </div>
+    </div>
+</div>
+
+<script>
+// Tour System
+let currentTourStep = 0;
+const tourSteps = [
+    {
+        title: "📊 Work Order Metrics",
+        content: `
+            <p>These metric cards show you the status of all work orders at a glance:</p>
+            <ul style="margin: 16px 0; padding-left: 20px;">
+                <li><strong>All Orders:</strong> Total number of orders in the system</li>
+                <li><strong>New:</strong> Orders that haven't been started yet</li>
+                <li><strong>In Progress:</strong> Currently being worked on</li>
+                <li><strong>Blocked:</strong> Orders waiting for dependencies</li>
+                <li><strong>Completed:</strong> Successfully finished orders</li>
+                <li><strong>Rejected:</strong> Orders that didn't meet criteria</li>
+            </ul>
+            <p><strong>💡 Tip:</strong> Click any metric card to filter the work orders table below!</p>
+        `,
+        highlight: '.metrics-grid'
+    },
+    {
+        title: "➕ Create Work Order",
+        content: `
+            <p>Use this form to create new work orders for any department:</p>
+            <ul style="margin: 16px 0; padding-left: 20px;">
+                <li><strong>Order Category:</strong> Choose "Existing" for recipe-based orders or "New" for custom orders</li>
+                <li><strong>Order Type:</strong> Select "Instant" for urgent orders or "Bulk" for larger batches</li>
+                <li><strong>Assign To:</strong> Choose which department should handle this order</li>
+                <li><strong>Packaging Size:</strong> Set the package size in grams (10-1000 gm)</li>
+            </ul>
+            <p><strong>💡 Tip:</strong> "Existing" orders show fewer fields for faster order creation!</p>
+        `,
+        highlight: '.grid-main > .panel:nth-child(2)'
+    },
+    {
+        title: "📦 Work Orders Table",
+        content: `
+            <p>The work orders table shows all orders in the system with their current status:</p>
+            <ul style="margin: 16px 0; padding-left: 20px;">
+                <li><strong>Color-coded Status:</strong> Each status has a different color for quick recognition</li>
+                <li><strong>Department Pills:</strong> See which team is responsible for each order</li>
+                <li><strong>Hover for Details:</strong> Blocked orders show the reason when you hover over the ℹ️ icon</li>
+            </ul>
+            <p><strong>💡 Tip:</strong> Click on metric cards above to filter this table by status!</p>
+        `,
+        highlight: '.table-panel'
+    },
+    {
+        title: "📖 Recipe Bank & Vendors",
+        content: `
+            <p>Two important features in the navigation:</p>
+            <ul style="margin: 16px 0; padding-left: 20px;">
+                <li><strong>Recipe Bank:</strong> Create and manage manufacturing recipes that can be reused for "Existing" orders</li>
+                <li><strong>Manage Vendors:</strong> Add and manage supplier information for procurement tasks</li>
+            </ul>
+            <p><strong>💡 Tip:</strong> Building a good recipe library saves time when creating recurring orders!</p>
+            <p style="margin-top: 20px; padding: 16px; background: rgba(59, 130, 246, 0.1); border-radius: 8px; border-left: 4px solid #3b82f6;">
+                <strong>Tour Complete! 🎉</strong><br>
+                You're ready to start using the Factory Management System. Click the <strong>Help</strong> button in the navigation anytime you need assistance!
+            </p>
+        `,
+        highlight: null
+    }
+];
+
+// Check if tour has been completed
+function checkTourStatus() {
+    const tourCompleted = localStorage.getItem('tourCompleted');
+    const currentPage = window.location.pathname;
+    
+    // Only show tour on dashboard (home page)
+    if (!tourCompleted && currentPage === '/') {
+        setTimeout(() => {
+            document.getElementById('welcomeModal').classList.add('active');
+        }, 1000); // Show after 1 second
+    }
+}
+
+function startTour() {
+    document.getElementById('welcomeModal').classList.remove('active');
+    currentTourStep = 0;
+    showTourStep();
+}
+
+function skipTour() {
+    document.getElementById('welcomeModal').classList.remove('active');
+    document.getElementById('tourModal').classList.remove('active');
+    localStorage.setItem('tourCompleted', 'true');
+    removeHighlight();
+}
+
+function showTourStep() {
+    const step = tourSteps[currentTourStep];
+    
+    document.getElementById('tourTitle').innerHTML = step.title;
+    document.getElementById('tourContent').innerHTML = step.content;
+    document.getElementById('tourProgress').textContent = `Step ${currentTourStep + 1} of ${tourSteps.length}`;
+    
+    // Show/hide previous button
+    document.getElementById('prevBtn').style.display = currentTourStep > 0 ? 'block' : 'none';
+    
+    // Change next button text on last step
+    const nextBtn = document.getElementById('nextBtn');
+    if (currentTourStep === tourSteps.length - 1) {
+        nextBtn.textContent = 'Finish Tour 🎉';
+    } else {
+        nextBtn.textContent = 'Next →';
+    }
+    
+    // Highlight element if specified
+    removeHighlight();
+    if (step.highlight) {
+        const element = document.querySelector(step.highlight);
+        if (element) {
+            element.classList.add('tour-highlight');
+            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    }
+    
+    document.getElementById('tourModal').classList.add('active');
+}
+
+function nextTourStep() {
+    if (currentTourStep < tourSteps.length - 1) {
+        currentTourStep++;
+        showTourStep();
+    } else {
+        // Tour completed
+        document.getElementById('tourModal').classList.remove('active');
+        localStorage.setItem('tourCompleted', 'true');
+        removeHighlight();
+    }
+}
+
+function previousTourStep() {
+    if (currentTourStep > 0) {
+        currentTourStep--;
+        showTourStep();
+    }
+}
+
+function removeHighlight() {
+    document.querySelectorAll('.tour-highlight').forEach(el => {
+        el.classList.remove('tour-highlight');
+    });
+}
+
+// Help System
+const helpContent = {
+    '/': `
+        <div class="help-section">
+            <h3>📊 Dashboard Overview</h3>
+            <p>The dashboard is your central hub for monitoring all factory operations. Here's what you can do:</p>
+            
+            <h4 style="color: #3b82f6; margin-top: 20px;">Work Order Metrics</h4>
+            <ul>
+                <li><strong>Click on any metric</strong> to filter the work orders table</li>
+                <li><strong>Color coding:</strong> Blue (info), Yellow (warning), Green (success), Red (danger)</li>
+                <li>Metrics update in real-time as orders are processed</li>
+            </ul>
+            
+            <h4 style="color: #3b82f6; margin-top: 20px;">Create Work Order</h4>
+            <ul>
+                <li><strong>Order Category:</strong> "Existing" for recipe-based orders, "New" for custom orders</li>
+                <li><strong>Order Type:</strong> "Instant" for urgent, "Bulk" for larger batches</li>
+                <li><strong>Packaging Size:</strong> Enter size in grams (10-1000, steps of 5)</li>
+                <li><strong>Department Assignment:</strong> Choose where the order should start</li>
+            </ul>
+            
+            <div class="help-tip">
+                <strong>💡 Pro Tip:</strong>
+                <p>Use "Existing" orders when you have recurring manufacturing tasks - it requires fewer fields and speeds up order creation!</p>
+            </div>
+            
+            <h4 style="color: #3b82f6; margin-top: 20px;">Work Order Table</h4>
+            <ul>
+                <li>Shows the 50 most recent orders</li>
+                <li>Hover over blocked orders to see the blocking reason</li>
+                <li>Each department has its own color-coded pill</li>
+            </ul>
+            
+            <h4 style="color: #3b82f6; margin-top: 20px;">Procurement Requests</h4>
+            <p>Manufacturing can raise procurement requests when raw materials are needed. Management reviews and approves/rejects these requests.</p>
+        </div>
+    `,
+    '/vendors': `
+        <div class="help-section">
+            <h3>🏢 Vendor Management</h3>
+            <p>The Vendor page helps you manage all your supplier information in one place.</p>
+            
+            <h4 style="color: #3b82f6; margin-top: 20px;">Adding Vendors</h4>
+            <ul>
+                <li><strong>Vendor Name:</strong> Full company name (required)</li>
+                <li><strong>Contact Person:</strong> Main point of contact</li>
+                <li><strong>Phone & Email:</strong> Primary contact information</li>
+                <li><strong>Address:</strong> Physical location for deliveries</li>
+            </ul>
+            
+            <h4 style="color: #3b82f6; margin-top: 20px;">Using Vendors</h4>
+            <p>When creating procurement orders, you can select a vendor from the dropdown. This helps track which suppliers provide which materials.</p>
+            
+            <div class="help-tip">
+                <strong>💡 Pro Tip:</strong>
+                <p>Keep vendor information up-to-date! This ensures smooth communication when placing orders.</p>
+            </div>
+            
+            <h4 style="color: #3b82f6; margin-top: 20px;">Security</h4>
+            <p>The vendor page is password-protected. Your session lasts 30 minutes. If you're locked out, re-enter the password to continue.</p>
+        </div>
+    `,
+    '/recipes': `
+        <div class="help-section">
+            <h3>📖 Recipe Bank</h3>
+            <p>The Recipe Bank stores standardized manufacturing processes that can be reused for consistent production.</p>
+            
+            <h4 style="color: #3b82f6; margin-top: 20px;">Creating Recipes</h4>
+            <ul>
+                <li><strong>Recipe Name:</strong> Unique identifier (e.g., "Standard Widget Assembly")</li>
+                <li><strong>Description:</strong> Brief overview of what this recipe produces</li>
+                <li><strong>Ingredients/Materials:</strong> List all required raw materials and quantities</li>
+                <li><strong>Instructions:</strong> Step-by-step manufacturing process</li>
+            </ul>
+            
+            <h4 style="color: #3b82f6; margin-top: 20px;">Using Recipes</h4>
+            <p>When creating a work order:</p>
+            <ul>
+                <li>Select "Existing" as the order category</li>
+                <li>Choose "Manufacturing" as the assigned department</li>
+                <li>Pick a recipe from the dropdown</li>
+                <li>The order title will automatically use the recipe name</li>
+            </ul>
+            
+            <div class="help-tip">
+                <strong>💡 Pro Tip:</strong>
+                <p>Build a comprehensive recipe library! This ensures consistent quality and speeds up order creation for recurring products.</p>
+            </div>
+            
+            <h4 style="color: #3b82f6; margin-top: 20px;">Viewing Recipe Details</h4>
+            <p>Click the eye (👁️) icon to view the complete recipe including all ingredients and instructions.</p>
+        </div>
+    `,
+    'default': `
+        <div class="help-section">
+            <h3>📚 General Help</h3>
+            <p>Welcome to the Factory Management System help page!</p>
+            
+            <h4 style="color: #3b82f6; margin-top: 20px;">Navigation</h4>
+            <ul>
+                <li><strong>Dashboard:</strong> Overview of all operations and metrics</li>
+                <li><strong>Procurement:</strong> Manage material sourcing from vendors</li>
+                <li><strong>Manufacturing:</strong> Production and assembly operations</li>
+                <li><strong>Quality:</strong> QA testing and quality control</li>
+                <li><strong>Packaging:</strong> Product packaging operations</li>
+                <li><strong>Inventory:</strong> Stock management (Raw & Delivery items)</li>
+                <li><strong>Recipe Bank:</strong> Manufacturing recipe library</li>
+                <li><strong>Vendors:</strong> Supplier management</li>
+            </ul>
+            
+            <h4 style="color: #3b82f6; margin-top: 20px;">Workflow</h4>
+            <p><strong>Raw Materials Path:</strong></p>
+            <p>Procurement → Procured → Inventory (Raw Materials)</p>
+            
+            <p style="margin-top: 12px;"><strong>Manufacturing Path:</strong></p>
+            <p>Manufacturing → QA → Packaging → Inventory (Delivery Items)</p>
+            
+            <h4 style="color: #3b82f6; margin-top: 20px;">Status Buttons</h4>
+            <p>Each department has action buttons that show the next logical step:</p>
+            <ul>
+                <li><strong>Green buttons:</strong> Success/completion actions</li>
+                <li><strong>Orange buttons:</strong> In-progress actions</li>
+                <li><strong>Red buttons:</strong> Rejection/failure actions</li>
+                <li><strong>Blue buttons:</strong> Information actions</li>
+            </ul>
+            
+            <div class="help-tip">
+                <strong>💡 Pro Tip:</strong>
+                <p>Hover over the ℹ️ icon next to blocked orders to see why they're blocked!</p>
+            </div>
+            
+            <h4 style="color: #3b82f6; margin-top: 20px;">Need More Help?</h4>
+            <p>Click the "Help" button on any page to see page-specific documentation.</p>
+        </div>
+    `
+};
+
+function openHelp() {
+    const currentPath = window.location.pathname;
+    const content = helpContent[currentPath] || helpContent['default'];
+    
+    document.getElementById('helpContent').innerHTML = content;
+    document.getElementById('helpModal').classList.add('active');
+}
+
+function closeHelp() {
+    document.getElementById('helpModal').classList.remove('active');
+}
+
+// Close modals on outside click
+document.addEventListener('click', function(e) {
+    if (e.target.classList.contains('modal')) {
+        e.target.classList.remove('active');
+    }
+});
+
+// Close modals on ESC key
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        document.querySelectorAll('.modal').forEach(modal => {
+            modal.classList.remove('active');
+        });
+        removeHighlight();
+    }
+});
+
+// Initialize tour check on page load
+document.addEventListener('DOMContentLoaded', function() {
+    checkTourStatus();
+});
+</script>
 </body>
 </html>
