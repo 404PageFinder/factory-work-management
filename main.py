@@ -29,10 +29,28 @@ from pydantic import BaseModel
 
 # ------------------ DATABASE SETUP ------------------ #
 
-DATABASE_URL = "sqlite:///./factory.db"
+import os
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker, declarative_base
 
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+# Use DATABASE_URL from environment (Vercel / local export)
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "sqlite:///./factory.db"  # fallback if env not set
+)
+
+# For Postgres, no special connect_args needed
+engine = create_engine(
+    DATABASE_URL,
+    pool_pre_ping=True,
+)
+
+SessionLocal = sessionmaker(
+    autocommit=False,
+    autoflush=False,
+    bind=engine
+)
+
 Base = declarative_base()
 
 
