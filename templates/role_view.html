@@ -134,6 +134,9 @@
         <button class="tab-button active" data-tab="raw" onclick="switchTab('raw')">
             🧪 Raw Materials
         </button>
+        <button class="tab-button" data-tab="packaging" onclick="switchTab('packaging')">
+            📦 Packaging Materials
+        </button>
     </div>
 
     <!-- Delivery Items Tab -->
@@ -331,6 +334,107 @@
                 {% if not raw_items %}
                 <tr>
                     <td colspan="7" class="text-center">No raw materials in inventory yet</td>
+                </tr>
+                {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Packaging Materials Tab -->
+    <div id="packaging-tab" class="tab-content" style="display: none;">
+        <div class="panel-header" style="border-top: none; padding-top: 0;">
+            <h3>📦 Packaging Materials</h3>
+            <p class="panel-subtitle">Packaging materials inventory (boxes, tubs, pouches)</p>
+        </div>
+        <div class="table-wrapper">
+            <table>
+                <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Type</th>
+                    <th>Size</th>
+                    <th>Status</th>
+                    <th>Quantity</th>
+                    <th>Vendor</th>
+                    <th>Actions</th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for o in packaging_items %}
+                <tr>
+                    <td><strong>{{ o.display_id or ('#' ~ o.id) }}</strong></td>
+                    <td>
+                        <span class="pill" style="background: rgba(139, 92, 246, 0.2); color: #c4b5fd;">
+                            {{ o.packaging_type or 'N/A' }}
+                        </span>
+                    </td>
+                    <td><strong>{{ o.packaging_size or 'N/A' }}</strong></td>
+                    <td>
+                        {% if o.status.value == 'blocked' %}
+                            <div class="blocked-indicator">
+                                <span class="pill pill-status-blocked">Blocked</span>
+                                {% if o.blocked_reason %}
+                                <span class="blocked-reason-tooltip" data-reason="{{ o.blocked_reason }}">
+                                    ℹ️
+                                </span>
+                                {% endif %}
+                            </div>
+                        {% else %}
+                            <span class="pill pill-status-{{ o.status.value }}">
+                                {% if o.status.value == 'new' %}Received{% else %}{{ o.status|pretty }}{% endif %}
+                            </span>
+                        {% endif %}
+                    </td>
+                    <td><strong>{{ o.quantity }}</strong> <span class="muted">{{ o.unit }}</span></td>
+                    <td>
+                        {% if o.vendor %}
+                            <span class="pill pill-vendor">{{ o.vendor.name }}</span>
+                        {% else %}
+                            <span class="muted">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="action-buttons">
+                            {% if o.status.value != 'blocked' %}
+                                {% for status_val, status_label, btn_class in order_actions.get(o.id, []) %}
+                                <form action="/role/{{ role.value }}/update-status" method="post" class="inline-form">
+                                    <input type="hidden" name="order_id" value="{{ o.id }}">
+                                    <input type="hidden" name="status" value="{{ status_val }}">
+                                    <button type="submit" class="btn btn-small btn-{{ btn_class }}">
+                                        {{ status_label }}
+                                    </button>
+                                </form>
+                                {% endfor %}
+                            {% endif %}
+                            
+                            {% if o.status.value != 'blocked' %}
+                            <button type="button" class="btn btn-small btn-blocked" onclick="openBlockModal({{ o.id }}, '{{ o.title }}')">
+                                🚫 Block
+                            </button>
+                            {% else %}
+                            <form action="/role/{{ role.value }}/update-status" method="post" class="inline-form">
+                                <input type="hidden" name="order_id" value="{{ o.id }}">
+                                <input type="hidden" name="status" value="new">
+                                <button type="submit" class="btn btn-small btn-info">
+                                    ✓ Unblock
+                                </button>
+                            </form>
+                            {% endif %}
+                            
+                            <form action="/role/{{ role.value }}/delete-order" method="post" class="inline-form">
+                                <input type="hidden" name="order_id" value="{{ o.id }}">
+                                <button type="submit" class="btn btn-small btn-small-secondary" onclick="return confirm('Are you sure?')">
+                                    🗑️ Delete
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+                {% if not packaging_items %}
+                <tr>
+                    <td colspan="7" class="text-center">No packaging materials in inventory yet</td>
                 </tr>
                 {% endif %}
                 </tbody>
