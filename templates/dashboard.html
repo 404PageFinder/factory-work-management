@@ -60,6 +60,51 @@
             </p>
         </div>
         <form action="/create-order" method="post" class="form">
+            <!-- Assign To - MOVED TO TOP -->
+            <div class="form-field">
+                <label for="assigned_role">👥 Assign To</label>
+                <select id="assigned_role" name="assigned_role">
+                    <option value="procurement">🛒 Procurement</option>
+                    <option value="manufacturing">⚙️ Manufacturing</option>
+                    <option value="qa">🔍 Quality</option>
+                    <option value="packaging">📦 Packaging</option>
+                    <option value="inventory">🏪 Inventory</option>
+                </select>
+            </div>
+
+            <!-- Procurement Order Type (only shown for Procurement) -->
+            <div class="form-field" id="procurement-type-field" style="display: none;">
+                <label for="procurement_order_type">📦 Procurement Order Type</label>
+                <div class="radio-group">
+                    <div class="radio-option">
+                        <input type="radio" id="proc_raw" name="procurement_order_type" value="raw_material" checked>
+                        <label for="proc_raw">🧪 Raw Material</label>
+                    </div>
+                    <div class="radio-option">
+                        <input type="radio" id="proc_packaging" name="procurement_order_type" value="packaging">
+                        <label for="proc_packaging">📦 Packaging</label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Packaging Type and Size (only shown for Packaging procurement) -->
+            <div class="form-field" id="packaging-type-field" style="display: none;">
+                <label for="packaging_type">📦 Packaging Type</label>
+                <select id="packaging_type" name="packaging_type">
+                    <option value="">Select Type</option>
+                    <option value="Cardboard boxes">📦 Cardboard boxes</option>
+                    <option value="Tubs">🥫 Tubs</option>
+                    <option value="Pouches">👝 Pouches</option>
+                </select>
+            </div>
+
+            <div class="form-field" id="packaging-size-field" style="display: none;">
+                <label for="packaging_size">📏 Size</label>
+                <select id="packaging_size" name="packaging_size">
+                    <option value="">Select Size</option>
+                </select>
+            </div>
+
             <!-- Order Category: New or Existing -->
             <div class="form-field">
                 <label for="order_category">📂 Order Category</label>
@@ -88,17 +133,6 @@
                 <label for="description">💬 Description</label>
                 <textarea id="description" name="description" rows="3"
                           placeholder="Short description or special instructions"></textarea>
-            </div>
-
-            <div class="form-field">
-                <label for="assigned_role">👥 Assign To</label>
-                <select id="assigned_role" name="assigned_role">
-                    <option value="procurement">🛒 Procurement</option>
-                    <option value="manufacturing">⚙️ Manufacturing</option>
-                    <option value="qa">🔍 Quality</option>
-                    <option value="packaging">📦 Packaging</option>
-                    <option value="inventory">🏪 Inventory</option>
-                </select>
             </div>
 
             <div class="form-field">
@@ -173,6 +207,55 @@
                 <button type="submit" class="btn btn-primary">Create Order</button>
             </div>
         </form>
+    </div>
+</section>
+
+<!-- CSV Import Section -->
+<section class="panel">
+    <div class="panel-header">
+        <h3>📥 Import Data</h3>
+        <p class="panel-subtitle">
+            Quickly onboard data from CSV files
+        </p>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px;">
+        <div style="background: #1e293b; padding: 16px; border-radius: 8px; border: 2px solid #334155;">
+            <h4 style="color: #93c5fd; margin-bottom: 8px;">🛒 Procurement Orders</h4>
+            <form action="/import-procurement" method="post" enctype="multipart/form-data" style="margin-top: 12px;">
+                <input type="file" name="file" accept=".csv" required style="margin-bottom: 8px; font-size: 13px;">
+                <button type="submit" class="btn btn-small btn-primary">Upload</button>
+            </form>
+        </div>
+        
+        <div style="background: #1e293b; padding: 16px; border-radius: 8px; border: 2px solid #334155;">
+            <h4 style="color: #fbbf24; margin-bottom: 8px;">📖 Recipes</h4>
+            <form action="/import-recipes" method="post" enctype="multipart/form-data" style="margin-top: 12px;">
+                <input type="file" name="file" accept=".csv" required style="margin-bottom: 8px; font-size: 13px;">
+                <button type="submit" class="btn btn-small btn-primary">Upload</button>
+            </form>
+        </div>
+        
+        <div style="background: #1e293b; padding: 16px; border-radius: 8px; border: 2px solid #334155;">
+            <h4 style="color: #a78bfa; margin-bottom: 8px;">🏢 Vendors</h4>
+            <form action="/import-vendors" method="post" enctype="multipart/form-data" style="margin-top: 12px;">
+                <input type="file" name="file" accept=".csv" required style="margin-bottom: 8px; font-size: 13px;">
+                <button type="submit" class="btn btn-small btn-primary">Upload</button>
+            </form>
+        </div>
+        
+        <div style="background: #1e293b; padding: 16px; border-radius: 8px; border: 2px solid #334155;">
+            <h4 style="color: #6ee7b7; margin-bottom: 8px;">⚙️ Manufacturing</h4>
+            <form action="/import-manufacturing" method="post" enctype="multipart/form-data" style="margin-top: 12px;">
+                <input type="file" name="file" accept=".csv" required style="margin-bottom: 8px; font-size: 13px;">
+                <button type="submit" class="btn btn-small btn-primary">Upload</button>
+            </form>
+        </div>
+    </div>
+    <div style="margin-top: 16px; padding: 12px; background: rgba(59, 130, 246, 0.1); border-radius: 6px; border-left: 3px solid #3b82f6;">
+        <p style="color: #cbd5e1; font-size: 13px; margin: 0;">
+            <strong>CSV Format:</strong> Include headers matching the data fields. 
+            <a href="/static/sample_procurement.csv" download style="color: #60a5fa; text-decoration: underline;">Download sample templates</a>
+        </p>
     </div>
 </section>
 
@@ -331,16 +414,37 @@ document.addEventListener('DOMContentLoaded', function () {
     const categoryNew = document.getElementById('category_new');
     const titleField = document.getElementById('title-field');
     const descriptionField = document.getElementById('description-field');
+    
+    // NEW: Procurement order type elements
+    const procurementTypeField = document.getElementById('procurement-type-field');
+    const procRawRadio = document.getElementById('proc_raw');
+    const procPackagingRadio = document.getElementById('proc_packaging');
+    const packagingTypeField = document.getElementById('packaging-type-field');
+    const packagingSizeField = document.getElementById('packaging-size-field');
+    const packagingTypeSelect = document.getElementById('packaging_type');
+    const packagingSizeSelect = document.getElementById('packaging_size');
+
+    // Packaging size options
+    const packagingSizes = {
+        'Cardboard boxes': ['24 tubs', '48 tubs'],
+        'Tubs': ['5gms', '10gms', '65gms'],
+        'Pouches': ['65gms', '100gms', '150gms', '200gms', '250gms', '500gms', '1kg', '5kg', '10kg']
+    };
 
     // Show/hide fields based on role
     function updateFieldsVisibility() {
         const role = roleSelect.value;
         
-        // Show vendor field only for procurement
+        // Show vendor field and procurement type only for procurement
         if (role === 'procurement') {
             vendorField.style.display = '';
+            procurementTypeField.style.display = '';
+            updateProcurementTypeFields();
         } else {
             vendorField.style.display = 'none';
+            procurementTypeField.style.display = 'none';
+            packagingTypeField.style.display = 'none';
+            packagingSizeField.style.display = 'none';
         }
         
         // Show recipe field only for manufacturing
@@ -348,6 +452,32 @@ document.addEventListener('DOMContentLoaded', function () {
             recipeField.style.display = '';
         } else {
             recipeField.style.display = 'none';
+        }
+    }
+
+    // Show/hide packaging fields based on procurement order type
+    function updateProcurementTypeFields() {
+        if (procPackagingRadio.checked) {
+            packagingTypeField.style.display = '';
+            packagingSizeField.style.display = '';
+        } else {
+            packagingTypeField.style.display = 'none';
+            packagingSizeField.style.display = 'none';
+        }
+    }
+
+    // Update packaging size dropdown based on packaging type
+    function updatePackagingSizeOptions() {
+        const selectedType = packagingTypeSelect.value;
+        packagingSizeSelect.innerHTML = '<option value="">Select Size</option>';
+        
+        if (selectedType && packagingSizes[selectedType]) {
+            packagingSizes[selectedType].forEach(size => {
+                const option = document.createElement('option');
+                option.value = size;
+                option.textContent = size;
+                packagingSizeSelect.appendChild(option);
+            });
         }
     }
 
@@ -370,6 +500,9 @@ document.addEventListener('DOMContentLoaded', function () {
     roleSelect.addEventListener('change', updateFieldsVisibility);
     categoryExisting.addEventListener('change', updateCategoryFields);
     categoryNew.addEventListener('change', updateCategoryFields);
+    procRawRadio.addEventListener('change', updateProcurementTypeFields);
+    procPackagingRadio.addEventListener('change', updateProcurementTypeFields);
+    packagingTypeSelect.addEventListener('change', updatePackagingSizeOptions);
     
     updateFieldsVisibility();
     updateCategoryFields();
