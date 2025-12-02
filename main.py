@@ -6,6 +6,8 @@ from fastapi import (
     Query,
     Response,
     Cookie,
+    UploadFile,
+    File,
 )
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -26,6 +28,9 @@ from sqlalchemy.orm import sessionmaker, declarative_base, Session, relationship
 from datetime import datetime
 import enum
 from pydantic import BaseModel
+import csv
+import io
+from typing import Optional
 
 # ------------------ DATABASE SETUP ------------------ #
 
@@ -95,6 +100,18 @@ class OrderCategory(str, enum.Enum):
 class ItemType(str, enum.Enum):
     raw = "raw"  # Raw materials (from procurement/manufacturing requests)
     delivery = "delivery"  # Delivery items (from packaging)
+    packaging = "packaging"  # Packaging materials
+
+
+class ProcurementOrderType(str, enum.Enum):
+    raw_material = "raw_material"
+    packaging = "packaging"
+
+
+class PackagingType(str, enum.Enum):
+    cardboard_boxes = "Cardboard boxes"
+    tubs = "Tubs"
+    pouches = "Pouches"
 
 
 class ProcurementRequestStatus(str, enum.Enum):
@@ -148,6 +165,10 @@ class WorkOrder(Base):
     item_type = Column(Enum(ItemType), default=ItemType.delivery)
     recipe_id = Column(Integer, ForeignKey("recipes.id"), nullable=True)
     packaging_size_gm = Column(Float, nullable=True)  # NEW: Packaging size in grams
+    # NEW: Procurement order type and packaging details
+    procurement_order_type = Column(String, nullable=True)  # "raw_material" or "packaging"
+    packaging_type = Column(String, nullable=True)  # "Cardboard boxes", "Tubs", "Pouches"
+    packaging_size = Column(String, nullable=True)  # e.g., "24 tubs", "65gms", "1kg"
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow)
     assigned_role = Column(Enum(RoleEnum), nullable=False)
@@ -514,6 +535,10 @@ def create_order_web(
     order_type: OrderType = Form(default=OrderType.instant),
     recipe_id: int | None = Form(default=None),
     packaging_size_gm: float = Form(default=50),
+    # NEW: Procurement order type and packaging fields
+    procurement_order_type: str = Form(default="raw_material"),
+    packaging_type: str = Form(default=""),
+    packaging_size: str = Form(default=""),
     db: Session = Depends(get_db),
 ):
     if vendor_id == 0:
@@ -530,6 +555,19 @@ def create_order_web(
         if recipe:
             final_title = recipe.name
     
+    # For packaging procurement orders, set title
+    if assigned_role == RoleEnum.procurement and procurement_order_type == "packaging":
+        if not final_title or final_title == "":
+            final_title = f"{packaging_type} - {packaging_size}"
+    
+    # Determine item_type based on assigned_role and procurement_order_type
+    determined_item_type = ItemType.delivery  # Default
+    if assigned_role == RoleEnum.procurement:
+        if procurement_order_type == "packaging":
+            determined_item_type = ItemType.packaging
+        else:
+            determined_item_type = ItemType.raw
+    
     wo = WorkOrder(
         display_id=generate_display_id("dashboard"),
         title=final_title if final_title else "Untitled Order",
@@ -543,7 +581,10 @@ def create_order_web(
         order_category=order_category,
         recipe_id=recipe_id,
         packaging_size_gm=packaging_size_gm,
-        item_type=ItemType.delivery,  # Default to delivery
+        item_type=determined_item_type,
+        procurement_order_type=procurement_order_type if assigned_role == RoleEnum.procurement else None,
+        packaging_type=packaging_type if packaging_type else None,
+        packaging_size=packaging_size if packaging_size else None,
     )
     db.add(wo)
     db.commit()
@@ -1061,12 +1102,14 @@ def role_view(role: RoleEnum, request: Request, db: Session = Depends(get_db)):
     for order in orders:
         order_actions[order.id] = get_next_status_buttons(role, order.status)
 
-    # For inventory, separate into raw and delivery items
+    # For inventory, separate into raw, delivery items, and packaging materials
     raw_items = []
     delivery_items = []
+    packaging_items = []
     if role == RoleEnum.inventory:
         raw_items = [o for o in orders if o.item_type == ItemType.raw]
         delivery_items = [o for o in orders if o.item_type == ItemType.delivery]
+        packaging_items = [o for o in orders if o.item_type == ItemType.packaging]
 
     return templates.TemplateResponse("role_view.html", {
         "request": request,
@@ -1074,6 +1117,7 @@ def role_view(role: RoleEnum, request: Request, db: Session = Depends(get_db)):
         "orders": orders,
         "raw_items": raw_items,
         "delivery_items": delivery_items,
+        "packaging_items": packaging_items,
         "manufacturing_reqs": manufacturing_reqs,
         "order_actions": order_actions,
     })
@@ -1156,3 +1200,149 @@ def delete_order(
         db.delete(wo)
         db.commit()
     return RedirectResponse(url=f"/role/{role.value}", status_code=303)
+
+
+# -------- CSV Import Endpoints -------- #
+
+@app.post("/import-procurement")
+async def import_procurement_csv(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    """Import procurement orders from CSV"""
+    try:
+        contents = await file.read()
+        decoded = contents.decode('utf-8')
+        csv_reader = csv.DictReader(io.StringIO(decoded))
+        
+        count = 0
+        for row in csv_reader:
+            # Parse procurement order type
+            proc_order_type = row.get('procurement_order_type', 'raw_material')
+            
+            # Determine item_type based on procurement_order_type
+            if proc_order_type == 'packaging':
+                item_type = ItemType.packaging
+            else:
+                item_type = ItemType.raw
+            
+            wo = WorkOrder(
+                display_id=generate_display_id("dashboard"),
+                title=row.get('title', 'Imported Order'),
+                description=row.get('description', ''),
+                assigned_role=RoleEnum.procurement,
+                status=WorkOrderStatus(row.get('status', 'new')),
+                quantity=int(row.get('quantity', 1)),
+                unit=row.get('unit', 'Count'),
+                order_type=OrderType(row.get('order_type', 'instant')),
+                order_category=OrderCategory(row.get('order_category', 'new')),
+                item_type=item_type,
+                procurement_order_type=proc_order_type,
+                packaging_type=row.get('packaging_type', None),
+                packaging_size=row.get('packaging_size', None),
+            )
+            db.add(wo)
+            count += 1
+        
+        db.commit()
+        return RedirectResponse(url=f"/?import_success={count}_procurement", status_code=303)
+    except Exception as e:
+        return RedirectResponse(url=f"/?import_error={str(e)}", status_code=303)
+
+
+@app.post("/import-recipes")
+async def import_recipes_csv(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    """Import recipes from CSV"""
+    try:
+        contents = await file.read()
+        decoded = contents.decode('utf-8')
+        csv_reader = csv.DictReader(io.StringIO(decoded))
+        
+        count = 0
+        for row in csv_reader:
+            # Check if recipe already exists
+            existing = db.query(Recipe).filter(Recipe.name == row.get('name', '')).first()
+            if existing:
+                continue
+                
+            recipe = Recipe(
+                name=row.get('name', f'Recipe {count+1}'),
+                description=row.get('description', ''),
+                ingredients=row.get('ingredients', ''),
+                instructions=row.get('instructions', ''),
+            )
+            db.add(recipe)
+            count += 1
+        
+        db.commit()
+        return RedirectResponse(url=f"/recipes?import_success={count}", status_code=303)
+    except Exception as e:
+        return RedirectResponse(url=f"/recipes?import_error={str(e)}", status_code=303)
+
+
+@app.post("/import-vendors")
+async def import_vendors_csv(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    """Import vendors from CSV"""
+    try:
+        contents = await file.read()
+        decoded = contents.decode('utf-8')
+        csv_reader = csv.DictReader(io.StringIO(decoded))
+        
+        count = 0
+        for row in csv_reader:
+            vendor = Vendor(
+                name=row.get('name', f'Vendor {count+1}'),
+                contact_person=row.get('contact_person', ''),
+                phone=row.get('phone', ''),
+                email=row.get('email', ''),
+                address=row.get('address', ''),
+                is_active=True,
+            )
+            db.add(vendor)
+            count += 1
+        
+        db.commit()
+        return RedirectResponse(url=f"/vendors?import_success={count}", status_code=303)
+    except Exception as e:
+        return RedirectResponse(url=f"/vendors?import_error={str(e)}", status_code=303)
+
+
+@app.post("/import-manufacturing")
+async def import_manufacturing_csv(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    """Import manufacturing orders from CSV"""
+    try:
+        contents = await file.read()
+        decoded = contents.decode('utf-8')
+        csv_reader = csv.DictReader(io.StringIO(decoded))
+        
+        count = 0
+        for row in csv_reader:
+            wo = WorkOrder(
+                display_id=generate_display_id("dashboard"),
+                title=row.get('title', 'Imported Manufacturing Order'),
+                description=row.get('description', ''),
+                assigned_role=RoleEnum.manufacturing,
+                status=WorkOrderStatus(row.get('status', 'new')),
+                quantity=int(row.get('quantity', 1)),
+                unit=row.get('unit', 'Count'),
+                order_type=OrderType(row.get('order_type', 'instant')),
+                order_category=OrderCategory(row.get('order_category', 'existing')),
+                item_type=ItemType.delivery,
+                packaging_size_gm=float(row.get('packaging_size_gm', 50)),
+            )
+            db.add(wo)
+            count += 1
+        
+        db.commit()
+        return RedirectResponse(url=f"/?import_success={count}_manufacturing", status_code=303)
+    except Exception as e:
+        return RedirectResponse(url=f"/?import_error={str(e)}", status_code=303)
