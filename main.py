@@ -213,7 +213,12 @@ ProcurementRequest.procurement_workorder = relationship(
     foreign_keys=[ProcurementRequest.procurement_workorder_id],
 )
 
-Base.metadata.create_all(bind=engine)
+# Create all tables - wrap in try-except for serverless environments
+try:
+    Base.metadata.create_all(bind=engine)
+except Exception as e:
+    print(f"Warning: Initial table creation failed: {e}")
+    print("Tables will be created on first request")
 
 
 # ------------------ Pydantic Schemas ------------------ #
@@ -452,11 +457,21 @@ def init_default_users(db: Session):
 # Initialize default users on startup
 @app.on_event("startup")
 def startup_event():
-    db = SessionLocal()
+    """Initialize database tables and default users on application startup"""
     try:
-        init_default_users(db)
-    finally:
-        db.close()
+        # Ensure all tables are created
+        Base.metadata.create_all(bind=engine)
+        
+        # Create database session
+        db = SessionLocal()
+        try:
+            init_default_users(db)
+        finally:
+            db.close()
+    except Exception as e:
+        # Log error but don't crash the application
+        print(f"Warning: Could not initialize default users on startup: {e}")
+        print("Users table may need to be created manually.")
 
 
 # ------------------ AUTH ------------------ #
@@ -557,15 +572,31 @@ def login(
     db: Session = Depends(get_db)
 ):
     """Process login"""
-    # Find user
-    user = db.query(User).filter(User.username == username).first()
-    
-    if not user or not verify_password(password, user.password):
-        # Redirect back to login with error
-        return RedirectResponse(
-            url="/login?error=Invalid username or password",
-            status_code=303
-        )
+    try:
+        # Ensure tables exist
+        Base.metadata.create_all(bind=engine)
+        
+        # Find user
+        user = db.query(User).filter(User.username == username).first()
+        
+        if not user or not verify_password(password, user.password):
+            # Redirect back to login with error
+            return RedirectResponse(
+                url="/login?error=Invalid username or password",
+                status_code=303
+            )
+    except Exception as e:
+        # If users table doesn't exist, return helpful error
+        if "does not exist" in str(e).lower():
+            return RedirectResponse(
+                url="/login?error=Users table not found. Please run database migration.",
+                status_code=303
+            )
+        else:
+            return RedirectResponse(
+                url=f"/login?error=Database error: {str(e)}",
+                status_code=303
+            )
     
     # Create session
     session_token = create_session_token()
