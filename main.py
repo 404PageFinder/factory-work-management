@@ -266,62 +266,7 @@ def create_session_token() -> str:
     """Generate a secure random session token"""
     return secrets.token_urlsafe(32)
 
-def get_current_user(
-    session_token: Optional[str] = Cookie(None, alias="session_token"),
-    db: Session = Depends(get_db)
-) -> Optional[User]:
-    """Get current logged-in user from session token"""
-    if not session_token or session_token not in active_sessions:
-        return None
-    
-    user_id = active_sessions[session_token]
-    user = db.query(User).filter(User.id == user_id).first()
-    return user
-
-def require_auth(
-    session_token: Optional[str] = Cookie(None, alias="session_token"),
-    db: Session = Depends(get_db)
-) -> User:
-    """Require authentication - redirect to login if not authenticated"""
-    user = get_current_user(session_token, db)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_303_SEE_OTHER,
-            headers={"Location": "/login"}
-        )
-    return user
-
-def init_default_users(db: Session):
-    """Initialize default users if they don't exist"""
-    default_users = [
-        {"username": "mgr1", "password": "1234", "role": RoleEnum.management},
-        {"username": "proc1", "password": "1234", "role": RoleEnum.procurement},
-        {"username": "manuf1", "password": "1234", "role": RoleEnum.manufacturing},
-        {"username": "qa1", "password": "1234", "role": RoleEnum.qa},
-        {"username": "pack1", "password": "1234", "role": RoleEnum.packaging},
-        {"username": "inv1", "password": "1234", "role": RoleEnum.inventory},
-    ]
-    
-    for user_data in default_users:
-        existing_user = db.query(User).filter(User.username == user_data["username"]).first()
-        if not existing_user:
-            new_user = User(
-                username=user_data["username"],
-                password=hash_password(user_data["password"]),
-                role=user_data["role"]
-            )
-            db.add(new_user)
-    
-    db.commit()
-
-# Initialize default users on startup
-@app.on_event("startup")
-def startup_event():
-    db = SessionLocal()
-    try:
-        init_default_users(db)
-    finally:
-        db.close()
+# Note: get_current_user and require_auth are defined after get_db (below)
 
 
 # ------------------ ID GENERATION ------------------ #
@@ -454,30 +399,78 @@ def get_db():
         db.close()
 
 
+# ------------------ AUTHENTICATION DEPENDENCIES ------------------ #
+
+def get_current_user(
+    session_token: Optional[str] = Cookie(None, alias="session_token"),
+    db: Session = Depends(get_db)
+) -> Optional[User]:
+    """Get current logged-in user from session token"""
+    if not session_token or session_token not in active_sessions:
+        return None
+    
+    user_id = active_sessions[session_token]
+    user = db.query(User).filter(User.id == user_id).first()
+    return user
+
+def require_auth(
+    session_token: Optional[str] = Cookie(None, alias="session_token"),
+    db: Session = Depends(get_db)
+) -> User:
+    """Require authentication - redirect to login if not authenticated"""
+    user = get_current_user(session_token, db)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_303_SEE_OTHER,
+            headers={"Location": "/login"}
+        )
+    return user
+
+def init_default_users(db: Session):
+    """Initialize default users if they don't exist"""
+    default_users = [
+        {"username": "mgr1", "password": "1234", "role": RoleEnum.management},
+        {"username": "proc1", "password": "1234", "role": RoleEnum.procurement},
+        {"username": "manuf1", "password": "1234", "role": RoleEnum.manufacturing},
+        {"username": "qa1", "password": "1234", "role": RoleEnum.qa},
+        {"username": "pack1", "password": "1234", "role": RoleEnum.packaging},
+        {"username": "inv1", "password": "1234", "role": RoleEnum.inventory},
+    ]
+    
+    for user_data in default_users:
+        existing_user = db.query(User).filter(User.username == user_data["username"]).first()
+        if not existing_user:
+            new_user = User(
+                username=user_data["username"],
+                password=hash_password(user_data["password"]),
+                role=user_data["role"]
+            )
+            db.add(new_user)
+    
+    db.commit()
+
+# Initialize default users on startup
+@app.on_event("startup")
+def startup_event():
+    db = SessionLocal()
+    try:
+        init_default_users(db)
+    finally:
+        db.close()
+
+
 # ------------------ AUTH ------------------ #
 
 def authenticate_user(db: Session, username: str, password: str):
-    return db.query(User).filter(User.username == username, User.password == password).first()
+    """Authenticate user with username and password (legacy API support)"""
+    user = db.query(User).filter(User.username == username).first()
+    if user and verify_password(password, user.password):
+        return user
+    return None
 
 
-def seed_users():
-    db = SessionLocal()
-    if db.query(User).count() == 0:
-        demo_users = [
-            ("proc1", "1234", RoleEnum.procurement),
-            ("manuf1", "1234", RoleEnum.manufacturing),
-            ("qa1", "1234", RoleEnum.qa),
-            ("pack1", "1234", RoleEnum.packaging),
-            ("inv1", "1234", RoleEnum.inventory),
-            ("mgr1", "1234", RoleEnum.management),
-        ]
-        for u, p, r in demo_users:
-            db.add(User(username=u, password=p, role=r))
-        db.commit()
-    db.close()
-
-
-seed_users()
+# Note: User seeding is now handled by init_default_users() in the startup event above
+# This ensures passwords are properly hashed
 
 
 # ------------------ STAGE PROGRESSION ------------------ #
