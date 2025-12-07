@@ -645,6 +645,14 @@ def dashboard(
     current_user: User = Depends(require_auth),
     db: Session = Depends(get_db)
 ):
+    # Only management can access dashboard
+    # Other users should go to their role page
+    if current_user.role != RoleEnum.management:
+        return RedirectResponse(
+            url=f"/role/{current_user.role.value}",
+            status_code=303
+        )
+    
     total = db.query(WorkOrder).count()
     new = db.query(WorkOrder).filter(WorkOrder.status == WorkOrderStatus.new).count()
     in_progress = db.query(WorkOrder).filter(WorkOrder.status == WorkOrderStatus.in_progress).count()
@@ -676,6 +684,7 @@ def dashboard(
 
     return templates.TemplateResponse("dashboard.html", {
         "request": request,
+        "current_user": current_user,
         "stats": {
             "total": total,
             "new": new,
@@ -864,12 +873,14 @@ def vendor_page(
     if vendor_auth != "ok":
         return templates.TemplateResponse("vendor_login.html", {
             "request": request,
+            "current_user": current_user,
             "error": None
         })
 
     vendors = db.query(Vendor).filter(Vendor.is_active == True).order_by(Vendor.name).all()
     return templates.TemplateResponse("vendor_list.html", {
         "request": request,
+        "current_user": current_user,
         "vendors": vendors,
     })
 
@@ -933,6 +944,7 @@ def recipe_list(
     recipes = db.query(Recipe).order_by(Recipe.name).all()
     return templates.TemplateResponse("recipe_list.html", {
         "request": request,
+        "current_user": current_user,
         "recipes": recipes,
     })
 
@@ -1261,6 +1273,17 @@ def role_view(
     current_user: User = Depends(require_auth),
     db: Session = Depends(get_db)
 ):
+    # Check if user has permission to access this role page
+    # Management can access all pages, others can only access their own role + inventory
+    if current_user.role != RoleEnum.management:
+        # Users can access their own role page or inventory page
+        if current_user.role != role and role != RoleEnum.inventory:
+            # Redirect to their own role page
+            return RedirectResponse(
+                url=f"/role/{current_user.role.value}",
+                status_code=303
+            )
+    
     orders = (
         db.query(WorkOrder)
         .filter(WorkOrder.assigned_role == role)
@@ -1292,6 +1315,7 @@ def role_view(
 
     return templates.TemplateResponse("role_view.html", {
         "request": request,
+        "current_user": current_user,
         "role": role,
         "orders": orders,
         "raw_items": raw_items,

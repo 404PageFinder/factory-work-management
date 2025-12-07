@@ -19,18 +19,41 @@
         </div>
     </div>
     <nav class="topbar-nav">
-        <a href="/" class="nav-item">Dashboard</a>
-        <a href="/role/procurement" class="nav-item">Procurement</a>
-        <a href="/role/manufacturing" class="nav-item">Manufacturing</a>
-        <a href="/role/qa" class="nav-item">Quality</a>
-        <a href="/role/packaging" class="nav-item">Packaging</a>
-        <a href="/role/inventory" class="nav-item">Inventory</a>
-        <a href="/recipes" class="nav-item">Recipe Bank</a>
-        <a href="/vendors" class="nav-item nav-item-cta">Manage Vendors</a>
-        <a href="#" class="nav-item nav-item-help" onclick="openHelp(); return false;">❓ Help</a>
-        <a href="/logout" class="nav-item" style="background: rgba(239, 68, 68, 0.1); color: #ef4444; border-radius: 6px; padding: 8px 16px;">
-            🚪 Logout
-        </a>
+        {% if current_user %}
+            <!-- Management users see everything -->
+            {% if current_user.role.value == 'management' %}
+                <a href="/" class="nav-item">Dashboard</a>
+                <a href="/role/procurement" class="nav-item">Procurement</a>
+                <a href="/role/manufacturing" class="nav-item">Manufacturing</a>
+                <a href="/role/qa" class="nav-item">Quality</a>
+                <a href="/role/packaging" class="nav-item">Packaging</a>
+                <a href="/role/inventory" class="nav-item">Inventory</a>
+                <a href="/recipes" class="nav-item">Recipe Bank</a>
+                <a href="/vendors" class="nav-item nav-item-cta">Manage Vendors</a>
+            {% else %}
+                <!-- Other users only see their own role page -->
+                <a href="/role/{{ current_user.role.value }}" class="nav-item">My Dashboard</a>
+                
+                <!-- Everyone can see recipes and inventory -->
+                <a href="/recipes" class="nav-item">Recipe Bank</a>
+                <a href="/role/inventory" class="nav-item">Inventory</a>
+                
+                <!-- Procurement can see vendors -->
+                {% if current_user.role.value == 'procurement' %}
+                    <a href="/vendors" class="nav-item">Vendors</a>
+                {% endif %}
+            {% endif %}
+            
+            <a href="#" class="nav-item nav-item-help" onclick="openHelp(); return false;">❓ Help</a>
+            
+            <!-- Show username and logout -->
+            <span class="nav-item" style="color: #94a3b8; pointer-events: none; padding: 8px 12px;">
+                👤 {{ current_user.username }}
+            </span>
+            <a href="/logout" class="nav-item" style="background: rgba(239, 68, 68, 0.1); color: #ef4444; border-radius: 6px; padding: 8px 16px;">
+                🚪 Logout
+            </a>
+        {% endif %}
     </nav>
 </header>
 
