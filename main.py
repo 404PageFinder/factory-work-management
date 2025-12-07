@@ -717,6 +717,7 @@ def create_order_web(
     procurement_order_type: str = Form(default="raw_material"),
     packaging_type: str = Form(default=""),
     packaging_size: str = Form(default=""),
+    current_user: User = Depends(require_auth),
     db: Session = Depends(get_db),
 ):
     if vendor_id == 0:
@@ -914,9 +915,17 @@ def create_vendor(
     phone: str = Form(""),
     email: str = Form(""),
     address: str = Form(""),
+    current_user: User = Depends(require_auth),
     vendor_auth: str | None = Cookie(default=None),
     db: Session = Depends(get_db),
 ):
+    # Only management and procurement can create vendors
+    if current_user.role not in [RoleEnum.management, RoleEnum.procurement]:
+        return RedirectResponse(
+            url="/vendors?error=Not authorized to create vendors",
+            status_code=303
+        )
+    
     if vendor_auth != "ok":
         return RedirectResponse(url="/vendors", status_code=303)
 
@@ -955,8 +964,16 @@ def create_recipe(
     description: str = Form(""),
     ingredients: str = Form(""),
     instructions: str = Form(""),
+    current_user: User = Depends(require_auth),
     db: Session = Depends(get_db),
 ):
+    # Only management and manufacturing can create recipes
+    if current_user.role not in [RoleEnum.management, RoleEnum.manufacturing]:
+        return RedirectResponse(
+            url="/recipes?error=Not authorized to create recipes",
+            status_code=303
+        )
+    
     recipe = Recipe(
         name=name,
         description=description or None,
@@ -969,7 +986,18 @@ def create_recipe(
 
 
 @app.post("/delete-recipe/{recipe_id}")
-def delete_recipe(recipe_id: int, db: Session = Depends(get_db)):
+def delete_recipe(
+    recipe_id: int,
+    current_user: User = Depends(require_auth),
+    db: Session = Depends(get_db)
+):
+    # Only management can delete recipes
+    if current_user.role != RoleEnum.management:
+        return RedirectResponse(
+            url="/recipes?error=Not authorized to delete recipes",
+            status_code=303
+        )
+    
     recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
     if recipe:
         db.delete(recipe)
@@ -979,7 +1007,12 @@ def delete_recipe(recipe_id: int, db: Session = Depends(get_db)):
 # -------- Help -------- #
 
 @app.get("/help/{page}", response_class=HTMLResponse)
-def help_page(page: str, request: Request):
+def help_page(
+    page: str, 
+    request: Request,
+    current_user: User = Depends(require_auth),
+    db: Session = Depends(get_db)
+):
     """Dynamic help page based on current page context"""
     
     help_data = {
@@ -1260,6 +1293,7 @@ def help_page(page: str, request: Request):
     
     return templates.TemplateResponse("help.html", {
         "request": request,
+        "current_user": current_user,
         "help": page_help,
         "page": page
     })
@@ -1410,8 +1444,15 @@ def delete_order(
 @app.post("/import-procurement")
 async def import_procurement_csv(
     file: UploadFile = File(...),
+    current_user: User = Depends(require_auth),
     db: Session = Depends(get_db)
 ):
+    # Only management and procurement can import procurement data
+    if current_user.role not in [RoleEnum.management, RoleEnum.procurement]:
+        return RedirectResponse(
+            url="/?error=Not authorized to import procurement data",
+            status_code=303
+        )
     """Import procurement orders from CSV"""
     try:
         contents = await file.read()
@@ -1456,8 +1497,15 @@ async def import_procurement_csv(
 @app.post("/import-recipes")
 async def import_recipes_csv(
     file: UploadFile = File(...),
+    current_user: User = Depends(require_auth),
     db: Session = Depends(get_db)
 ):
+    # Only management and manufacturing can import recipes
+    if current_user.role not in [RoleEnum.management, RoleEnum.manufacturing]:
+        return RedirectResponse(
+            url="/?error=Not authorized to import recipes",
+            status_code=303
+        )
     """Import recipes from CSV"""
     try:
         contents = await file.read()
@@ -1489,8 +1537,15 @@ async def import_recipes_csv(
 @app.post("/import-vendors")
 async def import_vendors_csv(
     file: UploadFile = File(...),
+    current_user: User = Depends(require_auth),
     db: Session = Depends(get_db)
 ):
+    # Only management and procurement can import vendors
+    if current_user.role not in [RoleEnum.management, RoleEnum.procurement]:
+        return RedirectResponse(
+            url="/?error=Not authorized to import vendors",
+            status_code=303
+        )
     """Import vendors from CSV"""
     try:
         contents = await file.read()
@@ -1519,8 +1574,15 @@ async def import_vendors_csv(
 @app.post("/import-manufacturing")
 async def import_manufacturing_csv(
     file: UploadFile = File(...),
+    current_user: User = Depends(require_auth),
     db: Session = Depends(get_db)
 ):
+    # Only management and manufacturing can import manufacturing data
+    if current_user.role not in [RoleEnum.management, RoleEnum.manufacturing]:
+        return RedirectResponse(
+            url="/?error=Not authorized to import manufacturing data",
+            status_code=303
+        )
     """Import manufacturing orders from CSV"""
     try:
         contents = await file.read()
