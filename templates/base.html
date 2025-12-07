@@ -30,25 +30,24 @@
                 <a href="/role/inventory" class="nav-item">Inventory</a>
                 <a href="/recipes" class="nav-item">Recipe Bank</a>
                 <a href="/vendors" class="nav-item nav-item-cta">Manage Vendors</a>
-            {% else %}
-                <!-- Other users only see their own role page -->
-                <a href="/role/{{ current_user.role.value }}" class="nav-item">My Dashboard</a>
-                
-                <!-- Everyone can see recipes and inventory -->
+            {% elif current_user.role.value == 'manufacturing' %}
+                <!-- Manufacturing can see their dashboard, recipes (read-only), and inventory -->
+                <a href="/role/manufacturing" class="nav-item">My Dashboard</a>
                 <a href="/recipes" class="nav-item">Recipe Bank</a>
                 <a href="/role/inventory" class="nav-item">Inventory</a>
-                
-                <!-- Procurement can see vendors -->
-                {% if current_user.role.value == 'procurement' %}
-                    <a href="/vendors" class="nav-item">Vendors</a>
-                {% endif %}
+            {% elif current_user.role.value == 'inventory' %}
+                <!-- Inventory can see their dashboard and inventory -->
+                <a href="/role/inventory" class="nav-item">My Dashboard</a>
+            {% else %}
+                <!-- Other users (procurement, qa, packaging) only see their own dashboard -->
+                <a href="/role/{{ current_user.role.value }}" class="nav-item">My Dashboard</a>
             {% endif %}
             
             <a href="#" class="nav-item nav-item-help" onclick="openHelp(); return false;">❓ Help</a>
             
-            <!-- Show username and logout -->
-            <span class="nav-item" style="color: #94a3b8; pointer-events: none; padding: 8px 12px;">
-                👤 {{ current_user.username }}
+            <!-- Show welcome message with username -->
+            <span class="nav-item" style="color: #94a3b8; pointer-events: none; padding: 8px 12px; font-weight: 500;">
+                Welcome, {{ current_user.username }}
             </span>
             <a href="/logout" class="nav-item" style="background: rgba(239, 68, 68, 0.1); color: #ef4444; border-radius: 6px; padding: 8px 16px;">
                 🚪 Logout
