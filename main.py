@@ -8,6 +8,8 @@ from fastapi import (
     Cookie,
     UploadFile,
     File,
+    HTTPException,
+    status,
 )
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -25,12 +27,14 @@ from sqlalchemy import (
     Float,
 )
 from sqlalchemy.orm import sessionmaker, declarative_base, Session, relationship
-from datetime import datetime
+from datetime import datetime, timedelta
 import enum
 from pydantic import BaseModel
 import csv
 import io
 from typing import Optional
+import hashlib
+import secrets
 
 # ------------------ DATABASE SETUP ------------------ #
 
@@ -243,6 +247,81 @@ app = FastAPI(title="Factory Work Management")
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
+
+
+# ------------------ AUTHENTICATION ------------------ #
+
+# Store active sessions in memory (in production, use Redis or database)
+active_sessions = {}
+
+def hash_password(password: str) -> str:
+    """Hash password using SHA-256"""
+    return hashlib.sha256(password.encode()).hexdigest()
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """Verify a password against its hash"""
+    return hash_password(plain_password) == hashed_password
+
+def create_session_token() -> str:
+    """Generate a secure random session token"""
+    return secrets.token_urlsafe(32)
+
+def get_current_user(
+    session_token: Optional[str] = Cookie(None, alias="session_token"),
+    db: Session = Depends(get_db)
+) -> Optional[User]:
+    """Get current logged-in user from session token"""
+    if not session_token or session_token not in active_sessions:
+        return None
+    
+    user_id = active_sessions[session_token]
+    user = db.query(User).filter(User.id == user_id).first()
+    return user
+
+def require_auth(
+    session_token: Optional[str] = Cookie(None, alias="session_token"),
+    db: Session = Depends(get_db)
+) -> User:
+    """Require authentication - redirect to login if not authenticated"""
+    user = get_current_user(session_token, db)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_303_SEE_OTHER,
+            headers={"Location": "/login"}
+        )
+    return user
+
+def init_default_users(db: Session):
+    """Initialize default users if they don't exist"""
+    default_users = [
+        {"username": "mgr1", "password": "1234", "role": RoleEnum.management},
+        {"username": "proc1", "password": "1234", "role": RoleEnum.procurement},
+        {"username": "manuf1", "password": "1234", "role": RoleEnum.manufacturing},
+        {"username": "qa1", "password": "1234", "role": RoleEnum.qa},
+        {"username": "pack1", "password": "1234", "role": RoleEnum.packaging},
+        {"username": "inv1", "password": "1234", "role": RoleEnum.inventory},
+    ]
+    
+    for user_data in default_users:
+        existing_user = db.query(User).filter(User.username == user_data["username"]).first()
+        if not existing_user:
+            new_user = User(
+                username=user_data["username"],
+                password=hash_password(user_data["password"]),
+                role=user_data["role"]
+            )
+            db.add(new_user)
+    
+    db.commit()
+
+# Initialize default users on startup
+@app.on_event("startup")
+def startup_event():
+    db = SessionLocal()
+    try:
+        init_default_users(db)
+    finally:
+        db.close()
 
 
 # ------------------ ID GENERATION ------------------ #
@@ -468,12 +547,78 @@ def api_list_workorders(role: RoleEnum | None = None, db: Session = Depends(get_
     return orders
 
 
+# ------------------ AUTHENTICATION ROUTES ------------------ #
+
+@app.get("/login", response_class=HTMLResponse)
+def login_page(request: Request, error: str = None):
+    """Display login page"""
+    return templates.TemplateResponse("login.html", {
+        "request": request,
+        "error": error
+    })
+
+@app.post("/login")
+def login(
+    username: str = Form(...),
+    password: str = Form(...),
+    db: Session = Depends(get_db)
+):
+    """Process login"""
+    # Find user
+    user = db.query(User).filter(User.username == username).first()
+    
+    if not user or not verify_password(password, user.password):
+        # Redirect back to login with error
+        return RedirectResponse(
+            url="/login?error=Invalid username or password",
+            status_code=303
+        )
+    
+    # Create session
+    session_token = create_session_token()
+    active_sessions[session_token] = user.id
+    
+    # Determine redirect URL based on role
+    if user.role == RoleEnum.management:
+        redirect_url = "/"  # Dashboard for management
+    else:
+        redirect_url = f"/role/{user.role.value}"  # Role-specific page
+    
+    # Set cookie and redirect
+    response = RedirectResponse(url=redirect_url, status_code=303)
+    response.set_cookie(
+        key="session_token",
+        value=session_token,
+        httponly=True,
+        max_age=86400,  # 24 hours
+        samesite="lax"
+    )
+    
+    return response
+
+@app.get("/logout")
+def logout(
+    session_token: Optional[str] = Cookie(None, alias="session_token")
+):
+    """Logout user"""
+    # Remove session
+    if session_token and session_token in active_sessions:
+        del active_sessions[session_token]
+    
+    # Redirect to login
+    response = RedirectResponse(url="/login", status_code=303)
+    response.delete_cookie("session_token")
+    
+    return response
+
+
 # ------------------ WEB PAGES ------------------ #
 
 @app.get("/", response_class=HTMLResponse)
 def dashboard(
     request: Request,
     status: str | None = Query(default=None),
+    current_user: User = Depends(require_auth),
     db: Session = Depends(get_db)
 ):
     total = db.query(WorkOrder).count()
@@ -688,6 +833,7 @@ VENDOR_COOKIE_MAX_AGE = 30 * 60
 @app.get("/vendors", response_class=HTMLResponse)
 def vendor_page(
     request: Request,
+    current_user: User = Depends(require_auth),
     vendor_auth: str | None = Cookie(default=None),
     db: Session = Depends(get_db),
 ):
@@ -755,7 +901,11 @@ def create_vendor(
 # -------- Recipes -------- #
 
 @app.get("/recipes", response_class=HTMLResponse)
-def recipe_list(request: Request, db: Session = Depends(get_db)):
+def recipe_list(
+    request: Request, 
+    current_user: User = Depends(require_auth),
+    db: Session = Depends(get_db)
+):
     recipes = db.query(Recipe).order_by(Recipe.name).all()
     return templates.TemplateResponse("recipe_list.html", {
         "request": request,
@@ -1081,7 +1231,12 @@ def help_page(page: str, request: Request):
 # -------- Role Pages -------- #
 
 @app.get("/role/{role}", response_class=HTMLResponse)
-def role_view(role: RoleEnum, request: Request, db: Session = Depends(get_db)):
+def role_view(
+    role: RoleEnum, 
+    request: Request, 
+    current_user: User = Depends(require_auth),
+    db: Session = Depends(get_db)
+):
     orders = (
         db.query(WorkOrder)
         .filter(WorkOrder.assigned_role == role)
